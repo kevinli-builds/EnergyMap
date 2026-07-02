@@ -1,0 +1,26 @@
+{
+  "name": "energy-map",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/build-data.mjs",
+    "dev": "next dev -p 3010",
+    "prebuild": "node scripts/build-data.mjs",
+    "build": "next build",
+    "data": "node scripts/build-data.mjs",
+    "jobs": "node scripts/fetch-jobs.mjs",
+    "import:gem": "node scripts/import-gem.mjs"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.6.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

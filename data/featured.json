@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Khavda Renewable Energy Park",
+    "blurb": "A renewable park the size of a city rising from the Rann of Kutch salt desert — ~30 GW of solar and wind planned, several GW already feeding the grid."
+  },
+  {
+    "name": "Dogger Bank Wind Farm",
+    "blurb": "Three phases, 3.6 GW, ~130 km off the Yorkshire coast — set to be the world's largest offshore wind farm, with turbines taller than the Eiffel Tower's second level."
+  },
+  {
+    "name": "Jiuquan Wind Power Base",
+    "blurb": "A wind megabase strung across the Gobi Desert wind corridor — thousands of turbines, more capacity than many countries' entire grids."
+  },
+  {
+    "name": "Bhadla Solar Park",
+    "blurb": "2.2 GW of panels across Rajasthan's Thar desert; from above it reads as a blue lake in the sand. Among the cheapest electricity ever contracted anywhere."
+  },
+  {
+    "name": "Noor Ouarzazate Solar Complex",
+    "blurb": "Concentrated solar towers and mirror fields at the gate of the Sahara, storing heat in molten salt to keep generating after sunset."
+  },
+  {
+    "name": "Lake Turkana Wind Power",
+    "blurb": "365 turbines in Kenya's Rift Valley, threaded through a natural wind funnel between two mountain ranges — around 15% of the country's electricity."
+  },
+  {
+    "name": "SunZia Wind",
+    "blurb": "3.5 GW across New Mexico plus a 550-mile HVDC line to carry it west — the largest clean-energy infrastructure project in US history."
+  },
+  {
+    "name": "Hollandse Kust Zuid",
+    "blurb": "1.5 GW in the Dutch North Sea, built entirely without subsidy — a milestone moment for offshore wind economics."
+  },
+  {
+    "name": "Moss Landing Energy Storage",
+    "blurb": "A retired gas plant site on Monterey Bay turned into one of the world's largest battery installations, storing solar for California evenings."
+  },
+  {
+    "name": "Dalian Flow Battery",
+    "blurb": "The world's largest vanadium flow battery — energy stored in tanks of liquid electrolyte that can cycle daily for decades without wearing out."
+  }
+]
