@@ -7,3 +7,9 @@ out/
 next-env.d.ts
 .DS_Store
 .claude/
+
+# Local GEM tracker downloads — large source binaries; import via `npm run import:gem`
+/GEM data/
+*.xlsx
+# Internal working notes (not for publication)
+/OPUS_BRIEF.md

@@ -1,0 +1,40 @@
+name: Refresh job counts
+
+# Re-fetches open-role counts from the companies' Greenhouse/Lever boards and
+# bakes them into the map data. Runs daily and on demand. The commit it pushes
+# triggers Vercel's auto-deploy, so the live site stays current.
+
+on:
+  schedule:
+    - cron: '17 6 * * *' # daily at 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The scripts use only Node built-ins, so no dependency install is needed.
+      - name: Fetch open-role counts
+        run: node scripts/fetch-jobs.mjs
+      - name: Rebuild map data
+        run: node scripts/build-data.mjs
+
+      - name: Commit and push if changed
+        run: |
+          if [ -n "$(git status --porcelain data/jobs.json public/data)" ]; then
+            git config user.name "energymap-bot"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add data/jobs.json public/data
+            git commit -m "chore: refresh open-role counts [skip ci]"
+            git push
+          else
+            echo "No changes to job counts."
+          fi

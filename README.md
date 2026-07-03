@@ -31,30 +31,42 @@ Source of truth is plain JSON in `data/`:
 `scripts/build-data.mjs` validates everything and writes
 `public/data/{projects,companies}.geojson`, which the map fetches at runtime.
 
-### ⚠️ Seed data disclaimer
+### ⚠️ Data provenance
 
-The checked-in dataset is **~135 real flagship projects curated by hand** (capacities,
-statuses and coordinates approximate, compiled from public reporting as of early 2026).
-It's meant to make the map immediately interesting — **verify before treating any figure
-as authoritative or publishing it**. Careers links point at company careers/home pages
-and may drift; spot-check them.
+The checked-in dataset combines two sources:
+
+- **Solar + wind** — the full [Global Energy Monitor](https://globalenergymonitor.org/)
+  trackers (CC BY 4.0), operating/construction, ≥ 200 MW solar / ≥ 300 MW wind
+  (~2,400 projects). Multi-phase projects collapse to one point at the first phase's
+  capacity, so per-project figures are approximate.
+- **Battery, geothermal, pumped-hydro + ~135 flagship projects** — curated by hand
+  (capacities/coordinates approximate, from public reporting as of early 2026).
+
+Good enough to be genuinely interesting, but **verify before treating any single figure
+as authoritative**. Careers links point at company careers pages and may drift.
+To refresh or extend GEM data, see below.
 
 ### Scaling up with Global Energy Monitor (the real dataset)
 
 [Global Energy Monitor](https://globalenergymonitor.org/projects/) publishes free,
 comprehensive trackers (CC BY 4.0) with exactly the fields this map needs:
 
-1. Download the **Global Solar Power Tracker** and/or **Global Wind Power Tracker**
+1. Download the **Global Solar / Wind / Geothermal / Hydropower Power Tracker**
    (free `.xlsx` after a short form).
-2. Open the main data sheet in Excel → save as **CSV (UTF-8)**.
-3. Import (keeps only operating/construction rows ≥ 200 MW by default):
+2. Import the `.xlsx` **directly** — no Excel needed. The data sheet is auto-detected
+   (the tab with the most rows; override with `--sheet "Name"`). Only operating/
+   construction rows ≥ 200 MW are kept by default (`--min` to change):
 
    ```bash
-   npm run import:gem -- --file solar.csv --tech solar
-   npm run import:gem -- --file wind.csv --tech wind --min 300
+   npm run import:gem -- --file solar.xlsx --tech solar
+   npm run import:gem -- --file wind.xlsx --tech wind --min 300
+   npm run import:gem -- --file geothermal.xlsx --tech geothermal --min 50
    npm run data
    ```
 
+   `.csv` files work too. Need a plain CSV for something else? `npm run xlsx2csv -- input.xlsx`.
+
+The `.xlsx` reader is dependency-free (`scripts/lib/xlsx.mjs`, tested via `npm run test:xlsx`).
 MapLibre's clustering handles tens of thousands of points, so the full trackers are fine.
 If you publish GEM data, credit them (CC BY 4.0).
 
@@ -64,7 +76,7 @@ Companies whose job boards run on Greenhouse or Lever expose free public JSON en
 Add an `ats` block to a company in `data/companies.json`:
 
 ```json
-{ "ats": { "type": "greenhouse", "slug": "formenergy" } }
+{ "ats": { "type": "greenhouse", "slug": "antora" } }
 ```
 
 Then:
@@ -74,19 +86,27 @@ npm run jobs   # writes data/jobs.json
 npm run data   # bakes counts into the geojson
 ```
 
-To find a slug: company careers pages hosted at `boards.greenhouse.io/<slug>` or
-`jobs.lever.co/<slug>` use that slug.
+Currently wired: **Antora Energy**, **Rondo Energy**, **Plus Power** (all Greenhouse).
+To find a slug: a careers page hosted at `boards.greenhouse.io/<slug>` or
+`jobs.lever.co/<slug>` uses that slug — verify it returns JSON at
+`https://boards-api.greenhouse.io/v1/boards/<slug>/jobs`.
 
-## Deploy
+**Nightly refresh:** `.github/workflows/refresh-jobs.yml` re-runs the fetch daily (and on
+demand), commits any changes, and — once the repo is on Vercel — that commit auto-deploys.
 
-Push to GitHub → import the repo in Vercel → framework preset **Next.js** → deploy.
-The build is a static export (`out/`), so the free tier is plenty.
+## Deploy (Vercel)
+
+1. Go to [vercel.com/new](https://vercel.com/new) and **Import** this GitHub repo.
+2. Vercel auto-detects **Next.js** — keep the defaults. **No environment variables** are
+   needed. (`prebuild` regenerates the map data, then `next build` emits the static export.)
+3. **Deploy.** Every push to `main` — including the nightly job-count bot — auto-redeploys.
+
+The build is a fully static export (`output: 'export'` → `out/`), so the free tier is plenty.
 
 ## Roadmap ideas
 
 - Shareable deep links to a project (URL hash already tracks map position)
 - Stats bar breakdown by tech; country league table
 - "Featured tour" mode that auto-flies between highlights
-- Pumped hydro + geothermal + transmission layers
+- Offshore-transmission / interconnector layers
 - Photos on featured projects (needs licensing care)
-- Nightly GitHub Action that re-runs `npm run jobs`
