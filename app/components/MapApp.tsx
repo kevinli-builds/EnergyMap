@@ -186,7 +186,11 @@ export default function MapApp() {
       zoom: 1.6,
       minZoom: 1.1,
       hash: true,
-      attributionControl: { compact: true, customAttribution: 'Project data: curated seed set' },
+      attributionControl: {
+        compact: true,
+        customAttribution:
+          'Projects: <a href="https://globalenergymonitor.org/" target="_blank" rel="noopener">Global Energy Monitor</a> (CC BY 4.0) + curated set',
+      },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
 
