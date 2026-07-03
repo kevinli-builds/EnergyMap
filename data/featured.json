@@ -38,5 +38,13 @@
   {
     "name": "Dalian Flow Battery",
     "blurb": "The world's largest vanadium flow battery — energy stored in tanks of liquid electrolyte that can cycle daily for decades without wearing out."
+  },
+  {
+    "name": "Dinorwig Power Station",
+    "blurb": "'Electric Mountain' — a pumped-hydro plant hidden inside a Welsh slate mountain that goes from standstill to 1.7 GW in about 16 seconds to catch demand surges."
+  },
+  {
+    "name": "The Geysers",
+    "blurb": "The world's largest geothermal field: 20+ power plants tapping steam from deep beneath the hills north of San Francisco, generating around the clock since the 1960s."
   }
 ]

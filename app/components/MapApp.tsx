@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import Controls from './Controls';
 import FeaturedPanel, { FeaturedLookup } from './FeaturedPanel';
-import { COLORS, esc, fmtCapacity, StatusFilter, Tech, TECH_LABEL } from './shared';
+import { COLORS, esc, fmtCapacity, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
 
 type PointFeature = {
   type: 'Feature';
@@ -13,7 +13,6 @@ type PointFeature = {
 };
 type FC = { type: 'FeatureCollection'; features: PointFeature[] };
 
-const TECHS: Tech[] = ['solar', 'wind', 'battery'];
 const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const EMPTY: FC = { type: 'FeatureCollection', features: [] };
 
@@ -146,10 +145,14 @@ export default function MapApp() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const dataRef = useRef<{ projects: FC; companies: FC } | null>(null);
-  const filteredRef = useRef<Record<Tech, PointFeature[]>>({ solar: [], wind: [], battery: [] });
+  const filteredRef = useRef<Record<Tech, PointFeature[]>>(
+    Object.fromEntries(TECHS.map((t) => [t, [] as PointFeature[]])) as Record<Tech, PointFeature[]>
+  );
 
   const [ready, setReady] = useState(false);
-  const [techOn, setTechOn] = useState<Record<Tech, boolean>>({ solar: true, wind: true, battery: true });
+  const [techOn, setTechOn] = useState<Record<Tech, boolean>>(
+    () => Object.fromEntries(TECHS.map((t) => [t, true])) as Record<Tech, boolean>
+  );
   const [status, setStatus] = useState<StatusFilter>('all');
   const [minCap, setMinCap] = useState(0);
   const [companiesOn, setCompaniesOn] = useState(true);
@@ -174,9 +177,10 @@ export default function MapApp() {
   }, []);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const container = containerRef.current;
+    if (!container || mapRef.current) return;
     const map = new maplibregl.Map({
-      container: containerRef.current,
+      container,
       style: STYLE_URL,
       center: [12, 22],
       zoom: 1.6,
@@ -185,25 +189,53 @@ export default function MapApp() {
       attributionControl: { compact: true, customAttribution: 'Project data: curated seed set' },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
-    map.on('style.load', () => {
+
+    // Fetch the data in parallel with the style load — it doesn't depend on the map.
+    const dataPromise = Promise.all([
+      fetch('/data/projects.geojson').then((r) => r.json() as Promise<FC>),
+      fetch('/data/companies.geojson').then((r) => r.json() as Promise<FC>),
+    ]);
+
+    // Add sources/layers on 'style.load' rather than 'load': 'load' waits for a first
+    // render, which never happens if the map mounts in a zero-size or hidden container
+    // (hidden tabs, CSS transitions, some preview harnesses). 'style.load' only needs
+    // the style parsed, so it fires regardless of canvas size.
+    let initialized = false;
+    map.on('style.load', async () => {
+      if (initialized) return;
+      initialized = true;
       try {
         map.setProjection({ type: 'globe' });
       } catch {
         // older maplibre without globe support — flat map is fine
       }
-    });
-    map.on('moveend', recomputeStats);
-    map.on('load', async () => {
-      const [projects, companies] = await Promise.all([
-        fetch('/data/projects.geojson').then((r) => r.json() as Promise<FC>),
-        fetch('/data/companies.geojson').then((r) => r.json() as Promise<FC>),
-      ]);
+      const [projects, companies] = await dataPromise;
       dataRef.current = { projects, companies };
       addLayers(map, companies);
       setReady(true);
     });
+    map.on('moveend', recomputeStats);
+
+    // Kick a resize when the container gains a real size, so rendering starts even if
+    // the map was created while the container was zero-size/hidden. Ignore zero-size
+    // and unchanged reports so a hidden/animating container can't thrash resize().
+    let lastW = 0;
+    let lastH = 0;
+    const ro = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (!box || box.width === 0 || box.height === 0) return;
+      const w = Math.round(box.width);
+      const h = Math.round(box.height);
+      if (w === lastW && h === lastH) return;
+      lastW = w;
+      lastH = h;
+      map.resize();
+    });
+    ro.observe(container);
+
     mapRef.current = map;
     return () => {
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
     };
@@ -257,7 +289,7 @@ export default function MapApp() {
       <div ref={containerRef} className="map-canvas" />
       <div className="hud">
         <h1>⚡ Energy Map</h1>
-        <p className="tagline">The world’s biggest solar, wind &amp; battery projects — and who’s building them</p>
+        <p className="tagline">The world’s biggest clean-energy projects — and who’s building them</p>
         <Controls
           techOn={techOn}
           onTech={(t) => setTechOn((s) => ({ ...s, [t]: !s[t] }))}

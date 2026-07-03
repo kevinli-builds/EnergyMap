@@ -1,10 +1,15 @@
-export type Tech = 'solar' | 'wind' | 'battery';
+export type Tech = 'solar' | 'wind' | 'battery' | 'geothermal' | 'hydro';
 export type StatusFilter = 'all' | 'operating' | 'construction';
+
+// Order here drives the layer/legend/chip order in the UI.
+export const TECHS: Tech[] = ['solar', 'wind', 'battery', 'geothermal', 'hydro'];
 
 export const COLORS: Record<Tech | 'company', string> = {
   solar: '#fbbf24',
   wind: '#38bdf8',
   battery: '#34d399',
+  geothermal: '#fb7185',
+  hydro: '#22d3ee',
   company: '#c084fc',
 };
 
@@ -12,6 +17,8 @@ export const TECH_LABEL: Record<Tech, string> = {
   solar: '☀️ Solar',
   wind: '💨 Wind',
   battery: '🔋 Battery',
+  geothermal: '♨️ Geothermal',
+  hydro: '💧 Pumped hydro',
 };
 
 const ESC: Record<string, string> = {

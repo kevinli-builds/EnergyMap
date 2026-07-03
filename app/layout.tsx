@@ -5,7 +5,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Energy Map — the world’s biggest clean energy projects',
   description:
-    'Interactive world map of major solar, wind and battery projects — operating and under construction — plus the companies building them that are hiring.',
+    'Interactive world map of major solar, wind, battery, geothermal and pumped-hydro projects — operating and under construction — plus the companies building them that are hiring.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

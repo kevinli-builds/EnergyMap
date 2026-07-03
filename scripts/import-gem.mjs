@@ -35,8 +35,10 @@ const arg = (flag, fallback) => {
 const file = arg('--file');
 const tech = arg('--tech');
 const minMW = Number(arg('--min', '200'));
-if (!file || !['solar', 'wind', 'battery'].includes(tech)) {
-  console.error('Usage: npm run import:gem -- --file <export.csv> --tech <solar|wind|battery> [--min 200]');
+if (!file || !['solar', 'wind', 'battery', 'geothermal', 'hydro'].includes(tech)) {
+  console.error(
+    'Usage: npm run import:gem -- --file <export.csv> --tech <solar|wind|battery|geothermal|hydro> [--min 200]'
+  );
   process.exit(1);
 }
 
