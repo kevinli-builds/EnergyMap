@@ -35,12 +35,15 @@ type ClickHandlers = {
 const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const EMPTY: FC = { type: 'FeatureCollection', features: [] };
 
-// Reflect the open project in the URL (?p=<slug>) without touching the map hash.
-function setQueryParam(slug: string | null) {
+// Reflect the open panel in the URL (?p=<slug> for a project, ?c=<country> for the
+// energy-mix panel) without touching the map position hash. null clears a param.
+function setParams(params: Record<string, string | null>) {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
-  if (slug) url.searchParams.set('p', slug);
-  else url.searchParams.delete('p');
+  for (const [k, v] of Object.entries(params)) {
+    if (v) url.searchParams.set(k, v);
+    else url.searchParams.delete(k);
+  }
   window.history.replaceState(null, '', url.toString());
 }
 
@@ -75,28 +78,42 @@ function openTransmissionPopup(map: maplibregl.Map, lngLat: maplibregl.LngLatLik
 function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, handlers: React.MutableRefObject<ClickHandlers>) {
   // Transmission lines first, so project dots draw on top of them.
   map.addSource('transmission', { type: 'geojson', data: transmission as any });
-  const lineWidth = ['interpolate', ['linear'], ['zoom'], 1.5, 1.2, 6, 3] as any;
+  const lineWidth = ['interpolate', ['linear'], ['zoom'], 2, 1.6, 6, 3.6] as any;
+  // Soft glow so the thin lines read on the dark globe at any zoom.
+  map.addLayer({
+    id: 'transmission-glow',
+    type: 'line',
+    source: 'transmission',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': GRID_COLOR,
+      'line-opacity': 0.25,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 2, 4, 6, 11] as any,
+      'line-blur': 4,
+    },
+  });
   map.addLayer({
     id: 'transmission-op',
     type: 'line',
     source: 'transmission',
     filter: ['==', ['get', 'status'], 'operating'],
-    layout: { 'line-cap': 'round' },
-    paint: { 'line-color': GRID_COLOR, 'line-opacity': 0.85, 'line-width': lineWidth },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': GRID_COLOR, 'line-opacity': 0.95, 'line-width': lineWidth },
   });
   map.addLayer({
     id: 'transmission-uc',
     type: 'line',
     source: 'transmission',
     filter: ['==', ['get', 'status'], 'construction'],
-    paint: { 'line-color': GRID_COLOR, 'line-opacity': 0.85, 'line-width': lineWidth, 'line-dasharray': [2, 2] },
+    layout: { 'line-join': 'round' },
+    paint: { 'line-color': GRID_COLOR, 'line-opacity': 0.95, 'line-width': lineWidth, 'line-dasharray': [1.5, 1.5] },
   });
   // Wide, invisible line for an easier click/hover target.
   map.addLayer({
     id: 'transmission-hit',
     type: 'line',
     source: 'transmission',
-    paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 12 },
+    paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 14 },
   });
   map.on('mouseenter', 'transmission-hit', () => {
     map.getCanvas().style.cursor = 'pointer';
@@ -277,16 +294,28 @@ export default function MapApp() {
     setFeaturedOpen(false);
     setCountryName(null);
     setSelected(p);
-    setQueryParam(p.slug ?? null);
+    setParams({ p: p.slug ?? null, c: null });
   }, []);
 
   // Open the country energy-mix panel (input is a project country name).
   const openCountry = useCallback((projectCountry: string) => {
+    const owid = COUNTRY_ALIAS[projectCountry] ?? projectCountry;
     setTourOn(false);
     setSelected(null);
-    setQueryParam(null);
     setFeaturedOpen(false);
-    setCountryName(COUNTRY_ALIAS[projectCountry] ?? projectCountry);
+    setCountryName(owid);
+    setParams({ c: owid, p: null });
+  }, []);
+
+  // Switch the country shown in the already-open panel (keeps ?c= in sync).
+  const changeCountry = useCallback((owidName: string) => {
+    setCountryName(owidName);
+    setParams({ c: owidName });
+  }, []);
+
+  const closeCountry = useCallback(() => {
+    setCountryName(null);
+    setParams({ c: null });
   }, []);
 
   const selectCompany = useCallback((coords: [number, number], p: Record<string, any>) => {
@@ -296,14 +325,15 @@ export default function MapApp() {
 
   const closeDetail = useCallback(() => {
     setSelected(null);
-    setQueryParam(null);
+    setParams({ p: null });
   }, []);
 
   // First visit: show the welcome overlay once (unless arriving on a ?p= deep
   // link — don't cover the project someone was sent to look at).
   useEffect(() => {
     try {
-      const deepLinked = new URLSearchParams(window.location.search).has('p');
+      const q = new URLSearchParams(window.location.search);
+      const deepLinked = q.has('p') || q.has('c');
       if (!deepLinked && !localStorage.getItem('em.introSeen')) setIntroOpen(true);
     } catch {
       // storage unavailable (private mode) — skip the intro rather than loop it
@@ -415,21 +445,28 @@ export default function MapApp() {
     if (map.getLayer('companies-pt')) {
       map.setLayoutProperty('companies-pt', 'visibility', companiesOn ? 'visible' : 'none');
     }
-    for (const id of ['transmission-op', 'transmission-uc', 'transmission-hit']) {
+    for (const id of ['transmission-glow', 'transmission-op', 'transmission-uc', 'transmission-hit']) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', gridOn ? 'visible' : 'none');
     }
     recomputeStats();
   }, [ready, techOn, status, minCap, companiesOn, gridOn, recomputeStats]);
 
-  // Resolve a ?p=<slug> deep link once data is ready: open its detail + fly there.
+  // Resolve deep links once data is ready: ?p=<slug> opens a project (and flies
+  // there); otherwise ?c=<country> opens the energy-mix panel.
   useEffect(() => {
     if (!ready) return;
-    const slug = new URLSearchParams(window.location.search).get('p');
-    if (!slug) return;
-    const f = dataRef.current?.projects.features.find((x) => x.properties.slug === slug);
-    if (!f) return;
-    setSelected(f.properties);
-    mapRef.current?.flyTo({ center: f.geometry.coordinates, zoom: 6, duration: 2000 });
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get('p');
+    if (slug) {
+      const f = dataRef.current?.projects.features.find((x) => x.properties.slug === slug);
+      if (f) {
+        setSelected(f.properties);
+        mapRef.current?.flyTo({ center: f.geometry.coordinates, zoom: 6, duration: 2000 });
+      }
+      return;
+    }
+    const c = params.get('c');
+    if (c) setCountryName(COUNTRY_ALIAS[c] ?? c);
   }, [ready]);
 
   // Featured "tour": auto-fly between highlights every 8s, blurb overlaid.
@@ -437,7 +474,8 @@ export default function MapApp() {
     if (!tourOn) return;
     setFeaturedOpen(false);
     setSelected(null);
-    setQueryParam(null);
+    setCountryName(null);
+    setParams({ p: null, c: null });
     let i = 0;
     const step = () => {
       const item = featured[i % featured.length];
@@ -465,7 +503,7 @@ export default function MapApp() {
     setFeaturedOpen(false);
     setCountryName(null);
     setSelected(f.properties);
-    setQueryParam(f.properties.slug ?? null);
+    setParams({ p: f.properties.slug ?? null, c: null });
     map.flyTo({ center: f.geometry.coordinates, zoom: 6.5, duration: 2200 });
   }, []);
 
@@ -533,7 +571,7 @@ export default function MapApp() {
       {!tourOn && selected ? (
         <DetailPanel project={selected} onClose={closeDetail} />
       ) : !tourOn && countryName ? (
-        <CountryPanel country={countryName} onCountry={setCountryName} onClose={() => setCountryName(null)} />
+        <CountryPanel country={countryName} onCountry={changeCountry} onClose={closeCountry} />
       ) : !tourOn && featuredOpen ? (
         <FeaturedPanel
           lookup={lookupFeatured}
