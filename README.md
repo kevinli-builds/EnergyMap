@@ -105,8 +105,11 @@ The build is a fully static export (`output: 'export'` → `out/`), so the free 
 
 ## Roadmap ideas
 
-- Shareable deep links to a project (URL hash already tracks map position)
 - Stats bar breakdown by tech; country league table
 - "Featured tour" mode that auto-flies between highlights
 - Offshore-transmission / interconnector layers
 - Photos on featured projects (needs licensing care)
+
+Done: clustered multi-tech map, status/capacity filters, legend, featured panel,
+project **detail drawer** with shareable `?p=<slug>` **deep links**, a **Jobs tab**
+with live open-role counts, GEM solar/wind import, nightly job refresh, PWA-free static export.

@@ -1,6 +1,6 @@
 'use client';
 
-import { COLORS, StatusFilter, Tech, TECH_LABEL } from './shared';
+import { COLORS, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
 
 const CAP_OPTIONS = [
   { v: 0, label: 'Any size' },
@@ -22,11 +22,9 @@ export default function Controls(props: {
   onStatus: (s: StatusFilter) => void;
   minCap: number;
   onMinCap: (n: number) => void;
-  companiesOn: boolean;
-  onCompanies: () => void;
   onFeatured: () => void;
 }) {
-  const { techOn, onTech, status, onStatus, minCap, onMinCap, companiesOn, onCompanies, onFeatured } = props;
+  const { techOn, onTech, status, onStatus, minCap, onMinCap, onFeatured } = props;
 
   return (
     <>
@@ -43,13 +41,6 @@ export default function Controls(props: {
               {TECH_LABEL[t]}
             </button>
           ))}
-          <button
-            className={`chip ${companiesOn ? 'on' : ''}`}
-            style={{ '--c': COLORS.company } as React.CSSProperties}
-            onClick={onCompanies}
-          >
-            🏢 Hiring
-          </button>
         </div>
       </div>
 
@@ -79,17 +70,24 @@ export default function Controls(props: {
         ★ Featured projects
       </button>
 
-      <div className="legend">
-        <span>
-          <span className="dot" style={{ background: '#9aa3b2' }} /> operating
-        </span>
-        <span>
-          <span
-            className="dot"
-            style={{ background: 'transparent', border: '2px solid #9aa3b2', width: 7, height: 7 }}
-          />{' '}
-          under construction
-        </span>
+      <div className="section">
+        <div className="section-label">Legend</div>
+        <div className="legend">
+          <div className="legend-row">
+            <span className="ldot filled" /> Operating
+            <span className="ldot ring" /> Under construction
+          </div>
+          <div className="legend-row">
+            <span className="ldot sz-s" />
+            <span className="ldot sz-l" /> Bigger dot = more capacity
+          </div>
+          <div className="legend-row">
+            {TECHS.map((t) => (
+              <span key={t} className="ldot" style={{ background: COLORS[t] }} title={TECH_LABEL[t]} />
+            ))}
+            Colour = technology
+          </div>
+        </div>
       </div>
     </>
   );

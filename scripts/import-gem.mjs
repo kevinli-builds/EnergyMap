@@ -23,10 +23,22 @@ const COLS = {
   name: ['Project Name', 'Project name'],
   capacity: ['Capacity (MW)', 'Capacity Rating (MW)'],
   status: ['Status'],
-  country: ['Country/Area', 'Country'],
+  country: ['Country/Area', 'Country', 'Country/Area 1'],
   lat: ['Latitude'],
   lng: ['Longitude'],
   owner: ['Owner'],
+  operator: ['Operator'],
+  year: ['Start year', 'Start Year'],
+  url: ['Wiki URL'],
+};
+
+// GEM owner/operator strings carry ownership shares and placeholders, e.g.
+// "Ministry of Energy (Afghanistan) [100%]" or "not found" — tidy them up.
+const cleanEntity = (s) => {
+  const v = String(s ?? '')
+    .replace(/\s*\[[^\]]*\]/g, '')
+    .trim();
+  return /^(not found|unknown|--|n\/a|)$/i.test(v) ? '' : v;
 };
 // GEM statuses can carry suffixes (e.g. "operating - inferred 2 y"), so match by
 // prefix. Only operating + construction are imported; everything else is skipped.
@@ -155,8 +167,14 @@ for (const row of rows) {
     lng: +lng.toFixed(4),
     source: 'gem',
   };
-  const owner = idx.owner >= 0 ? String(row[idx.owner] ?? '').trim() : '';
+  const owner = idx.owner >= 0 ? cleanEntity(row[idx.owner]) : '';
   if (owner) p.owner = owner;
+  const operator = idx.operator >= 0 ? cleanEntity(row[idx.operator]) : '';
+  if (operator && operator !== owner) p.operator = operator;
+  const year = idx.year >= 0 ? parseInt(row[idx.year], 10) : NaN;
+  if (Number.isFinite(year) && year >= 1900 && year <= 2100) p.year = year;
+  const url = idx.url >= 0 ? String(row[idx.url] ?? '').trim() : '';
+  if (/^https?:\/\//i.test(url)) p.url = url;
   projects.push(p);
   added++;
 }

@@ -40,9 +40,26 @@ const point = (lng, lat, properties) => ({
   properties,
 });
 
+// Stable, unique per-project slug — powers the ?p=<slug> shareable deep links.
+const slugCounts = new Map();
+const slugify = (s) =>
+  String(s)
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '') // strip combining accents
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+const uniqueSlug = (name) => {
+  const base = slugify(name) || 'project';
+  const n = slugCounts.get(base) || 0;
+  slugCounts.set(base, n + 1);
+  return n ? `${base}-${n + 1}` : base;
+};
+
 const projectsFC = fc(
   projects.map((p) =>
     point(p.lng, p.lat, {
+      slug: uniqueSlug(p.name),
       name: p.name,
       tech: p.tech,
       status: p.status,
@@ -50,7 +67,10 @@ const projectsFC = fc(
       energyMWh: p.energyMWh ?? null,
       country: p.country,
       owner: p.owner ?? null,
+      operator: p.operator ?? null,
+      year: p.year ?? null,
       note: p.note ?? null,
+      url: p.url ?? null,
     })
   )
 );

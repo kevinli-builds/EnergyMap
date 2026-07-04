@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import Controls from './Controls';
 import FeaturedPanel, { FeaturedLookup } from './FeaturedPanel';
-import { COLORS, esc, fmtCapacity, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
+import DetailPanel from './DetailPanel';
+import JobsPanel, { CompanyProps } from './JobsPanel';
+import { COLORS, esc, StatusFilter, Tech, TECHS } from './shared';
 
 type PointFeature = {
   type: 'Feature';
@@ -13,23 +15,21 @@ type PointFeature = {
 };
 type FC = { type: 'FeatureCollection'; features: PointFeature[] };
 
+type ClickHandlers = {
+  selectProject: (p: Record<string, any>) => void;
+  selectCompany: (coords: [number, number], p: Record<string, any>) => void;
+};
+
 const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const EMPTY: FC = { type: 'FeatureCollection', features: [] };
 
-function openProjectPopup(map: maplibregl.Map, coords: [number, number], p: Record<string, any>) {
-  const statusHtml =
-    p.status === 'operating'
-      ? '<span class="badge op">Operating</span>'
-      : '<span class="badge uc">Under construction</span>';
-  const html = `<div class="pp">
-    <div class="pp-title">${esc(p.name)}</div>
-    <div class="pp-sub">${TECH_LABEL[p.tech as Tech] ?? esc(p.tech)} · ${esc(p.country)}</div>
-    <div class="pp-cap">${esc(fmtCapacity(p.capacityMW, p.energyMWh))}</div>
-    ${statusHtml}
-    ${p.owner ? `<div class="pp-row">Owner: ${esc(p.owner)}</div>` : ''}
-    ${p.note ? `<div class="pp-note">${esc(p.note)}</div>` : ''}
-  </div>`;
-  new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(coords).setHTML(html).addTo(map);
+// Reflect the open project in the URL (?p=<slug>) without touching the map hash.
+function setQueryParam(slug: string | null) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (slug) url.searchParams.set('p', slug);
+  else url.searchParams.delete('p');
+  window.history.replaceState(null, '', url.toString());
 }
 
 function openCompanyPopup(map: maplibregl.Map, coords: [number, number], p: Record<string, any>) {
@@ -43,7 +43,7 @@ function openCompanyPopup(map: maplibregl.Map, coords: [number, number], p: Reco
   new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(coords).setHTML(html).addTo(map);
 }
 
-function addLayers(map: maplibregl.Map, companies: FC) {
+function addLayers(map: maplibregl.Map, companies: FC, handlers: React.MutableRefObject<ClickHandlers>) {
   for (const tech of TECHS) {
     const color = COLORS[tech];
     map.addSource(`proj-${tech}`, {
@@ -131,13 +131,13 @@ function addLayers(map: maplibregl.Map, companies: FC) {
     map.on('click', `proj-${tech}-pt`, (e) => {
       const f = e.features?.[0];
       if (!f) return;
-      openProjectPopup(map, (f.geometry as any).coordinates, f.properties as any);
+      handlers.current.selectProject(f.properties as any);
     });
   }
   map.on('click', 'companies-pt', (e) => {
     const f = e.features?.[0];
     if (!f) return;
-    openCompanyPopup(map, (f.geometry as any).coordinates, f.properties as any);
+    handlers.current.selectCompany((f.geometry as any).coordinates, f.properties as any);
   });
 }
 
@@ -148,8 +148,10 @@ export default function MapApp() {
   const filteredRef = useRef<Record<Tech, PointFeature[]>>(
     Object.fromEntries(TECHS.map((t) => [t, [] as PointFeature[]])) as Record<Tech, PointFeature[]>
   );
+  const handlersRef = useRef<ClickHandlers>({ selectProject: () => {}, selectCompany: () => {} });
 
   const [ready, setReady] = useState(false);
+  const [tab, setTab] = useState<'map' | 'jobs'>('map');
   const [techOn, setTechOn] = useState<Record<Tech, boolean>>(
     () => Object.fromEntries(TECHS.map((t) => [t, true])) as Record<Tech, boolean>
   );
@@ -157,6 +159,8 @@ export default function MapApp() {
   const [minCap, setMinCap] = useState(0);
   const [companiesOn, setCompaniesOn] = useState(true);
   const [featuredOpen, setFeaturedOpen] = useState(false);
+  const [selected, setSelected] = useState<Record<string, any> | null>(null);
+  const [companiesList, setCompaniesList] = useState<CompanyProps[]>([]);
   const [stats, setStats] = useState({ count: 0, gw: 0 });
 
   const recomputeStats = useCallback(() => {
@@ -175,6 +179,25 @@ export default function MapApp() {
     }
     setStats({ count, gw: mw / 1000 });
   }, []);
+
+  const selectProject = useCallback((p: Record<string, any>) => {
+    setFeaturedOpen(false);
+    setSelected(p);
+    setQueryParam(p.slug ?? null);
+  }, []);
+
+  const selectCompany = useCallback((coords: [number, number], p: Record<string, any>) => {
+    const map = mapRef.current;
+    if (map) openCompanyPopup(map, coords, p);
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    setSelected(null);
+    setQueryParam(null);
+  }, []);
+
+  // Keep the map's click handlers pointing at the latest callbacks.
+  handlersRef.current = { selectProject, selectCompany };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -215,7 +238,8 @@ export default function MapApp() {
       }
       const [projects, companies] = await dataPromise;
       dataRef.current = { projects, companies };
-      addLayers(map, companies);
+      addLayers(map, companies, handlersRef);
+      setCompaniesList(companies.features.map((f) => f.properties as CompanyProps));
       setReady(true);
     });
     map.on('moveend', recomputeStats);
@@ -272,6 +296,17 @@ export default function MapApp() {
     recomputeStats();
   }, [ready, techOn, status, minCap, companiesOn, recomputeStats]);
 
+  // Resolve a ?p=<slug> deep link once data is ready: open its detail + fly there.
+  useEffect(() => {
+    if (!ready) return;
+    const slug = new URLSearchParams(window.location.search).get('p');
+    if (!slug) return;
+    const f = dataRef.current?.projects.features.find((x) => x.properties.slug === slug);
+    if (!f) return;
+    setSelected(f.properties);
+    mapRef.current?.flyTo({ center: f.geometry.coordinates, zoom: 6, duration: 2000 });
+  }, [ready]);
+
   const lookupFeatured = useCallback((name: string): FeaturedLookup | null => {
     const f = dataRef.current?.projects.features.find((x) => x.properties.name === name);
     if (!f) return null;
@@ -284,8 +319,17 @@ export default function MapApp() {
     const f = dataRef.current?.projects.features.find((x) => x.properties.name === name);
     if (!map || !f) return;
     setFeaturedOpen(false);
+    setSelected(f.properties);
+    setQueryParam(f.properties.slug ?? null);
     map.flyTo({ center: f.geometry.coordinates, zoom: 6.5, duration: 2200 });
-    map.once('moveend', () => openProjectPopup(map, f.geometry.coordinates, f.properties));
+  }, []);
+
+  const flyToCompany = useCallback((name: string) => {
+    const map = mapRef.current;
+    const f = dataRef.current?.companies.features.find((x) => x.properties.name === name);
+    if (!map || !f) return;
+    map.flyTo({ center: f.geometry.coordinates, zoom: 5, duration: 1800 });
+    map.once('moveend', () => openCompanyPopup(map, f.geometry.coordinates, f.properties));
   }, []);
 
   return (
@@ -294,21 +338,42 @@ export default function MapApp() {
       <div className="hud">
         <h1>⚡ Energy Map</h1>
         <p className="tagline">The world’s biggest clean-energy projects — and who’s building them</p>
-        <Controls
-          techOn={techOn}
-          onTech={(t) => setTechOn((s) => ({ ...s, [t]: !s[t] }))}
-          status={status}
-          onStatus={setStatus}
-          minCap={minCap}
-          onMinCap={setMinCap}
-          companiesOn={companiesOn}
-          onCompanies={() => setCompaniesOn((v) => !v)}
-          onFeatured={() => setFeaturedOpen((v) => !v)}
-        />
+
+        <div className="tabs">
+          <button className={tab === 'map' ? 'on' : ''} onClick={() => setTab('map')}>
+            🗺 Map
+          </button>
+          <button className={tab === 'jobs' ? 'on' : ''} onClick={() => setTab('jobs')}>
+            🏢 Jobs
+          </button>
+        </div>
+
+        {tab === 'map' ? (
+          <Controls
+            techOn={techOn}
+            onTech={(t) => setTechOn((s) => ({ ...s, [t]: !s[t] }))}
+            status={status}
+            onStatus={setStatus}
+            minCap={minCap}
+            onMinCap={setMinCap}
+            onFeatured={() => setFeaturedOpen((v) => !v)}
+          />
+        ) : (
+          <JobsPanel
+            companies={companiesList}
+            companiesOn={companiesOn}
+            onToggle={() => setCompaniesOn((v) => !v)}
+            onSelect={flyToCompany}
+          />
+        )}
       </div>
-      {featuredOpen && (
+
+      {selected ? (
+        <DetailPanel project={selected} onClose={closeDetail} />
+      ) : featuredOpen ? (
         <FeaturedPanel lookup={lookupFeatured} onSelect={flyToFeatured} onClose={() => setFeaturedOpen(false)} />
-      )}
+      ) : null}
+
       <div className="stats">
         {ready ? `${stats.count} projects · ${stats.gw.toFixed(1)} GW in view` : 'Loading data…'}
       </div>
