@@ -7,8 +7,9 @@ import FeaturedPanel, { FeaturedLookup } from './FeaturedPanel';
 import DetailPanel from './DetailPanel';
 import JobsPanel, { CompanyProps } from './JobsPanel';
 import Intro from './Intro';
+import CountryPanel from './CountryPanel';
 import featured from '../../data/featured.json';
-import { COLORS, esc, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
+import { COLORS, esc, fmtCapacity, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
 
 type PointFeature = {
   type: 'Feature';
@@ -16,6 +17,15 @@ type PointFeature = {
   properties: Record<string, any>;
 };
 type FC = { type: 'FeatureCollection'; features: PointFeature[] };
+type LineFC = { type: 'FeatureCollection'; features: any[] };
+
+// GEM/curated country names → Our World in Data names (the few that differ).
+const COUNTRY_ALIAS: Record<string, string> = {
+  Türkiye: 'Turkey',
+  'DR Congo': 'Democratic Republic of Congo',
+};
+
+const GRID_COLOR = '#fb923c';
 
 type ClickHandlers = {
   selectProject: (p: Record<string, any>) => void;
@@ -45,7 +55,60 @@ function openCompanyPopup(map: maplibregl.Map, coords: [number, number], p: Reco
   new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(coords).setHTML(html).addTo(map);
 }
 
-function addLayers(map: maplibregl.Map, companies: FC, handlers: React.MutableRefObject<ClickHandlers>) {
+function openTransmissionPopup(map: maplibregl.Map, lngLat: maplibregl.LngLatLike, p: Record<string, any>) {
+  const statusHtml =
+    p.status === 'operating'
+      ? '<span class="badge op">Operating</span>'
+      : '<span class="badge uc">Under construction</span>';
+  const kind = p.type === 'interconnector' ? 'Interconnector' : 'Transmission line';
+  const route = p.from && p.to ? `${esc(p.from)} → ${esc(p.to)}` : '';
+  const html = `<div class="pp">
+    <div class="pp-title">${esc(p.name)}</div>
+    <div class="pp-sub">${kind}${route ? ' · ' + route : ''}</div>
+    <div class="pp-cap">${esc(fmtCapacity(p.capacityMW))}</div>
+    ${statusHtml}
+    ${p.note ? `<div class="pp-note">${esc(p.note)}</div>` : ''}
+  </div>`;
+  new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(lngLat).setHTML(html).addTo(map);
+}
+
+function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, handlers: React.MutableRefObject<ClickHandlers>) {
+  // Transmission lines first, so project dots draw on top of them.
+  map.addSource('transmission', { type: 'geojson', data: transmission as any });
+  const lineWidth = ['interpolate', ['linear'], ['zoom'], 1.5, 1.2, 6, 3] as any;
+  map.addLayer({
+    id: 'transmission-op',
+    type: 'line',
+    source: 'transmission',
+    filter: ['==', ['get', 'status'], 'operating'],
+    layout: { 'line-cap': 'round' },
+    paint: { 'line-color': GRID_COLOR, 'line-opacity': 0.85, 'line-width': lineWidth },
+  });
+  map.addLayer({
+    id: 'transmission-uc',
+    type: 'line',
+    source: 'transmission',
+    filter: ['==', ['get', 'status'], 'construction'],
+    paint: { 'line-color': GRID_COLOR, 'line-opacity': 0.85, 'line-width': lineWidth, 'line-dasharray': [2, 2] },
+  });
+  // Wide, invisible line for an easier click/hover target.
+  map.addLayer({
+    id: 'transmission-hit',
+    type: 'line',
+    source: 'transmission',
+    paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 12 },
+  });
+  map.on('mouseenter', 'transmission-hit', () => {
+    map.getCanvas().style.cursor = 'pointer';
+  });
+  map.on('mouseleave', 'transmission-hit', () => {
+    map.getCanvas().style.cursor = '';
+  });
+  map.on('click', 'transmission-hit', (e) => {
+    const f = e.features?.[0];
+    if (f) openTransmissionPopup(map, e.lngLat, f.properties as any);
+  });
+
   for (const tech of TECHS) {
     const color = COLORS[tech];
     map.addSource(`proj-${tech}`, {
@@ -146,7 +209,7 @@ function addLayers(map: maplibregl.Map, companies: FC, handlers: React.MutableRe
 export default function MapApp() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const dataRef = useRef<{ projects: FC; companies: FC } | null>(null);
+  const dataRef = useRef<{ projects: FC; companies: FC; transmission: LineFC } | null>(null);
   const filteredRef = useRef<Record<Tech, PointFeature[]>>(
     Object.fromEntries(TECHS.map((t) => [t, [] as PointFeature[]])) as Record<Tech, PointFeature[]>
   );
@@ -160,8 +223,10 @@ export default function MapApp() {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [minCap, setMinCap] = useState(0);
   const [companiesOn, setCompaniesOn] = useState(true);
+  const [gridOn, setGridOn] = useState(true);
   const [featuredOpen, setFeaturedOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, any> | null>(null);
+  const [countryName, setCountryName] = useState<string | null>(null);
   const [companiesList, setCompaniesList] = useState<CompanyProps[]>([]);
   const [hudOpen, setHudOpen] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 640));
   const [statsOpen, setStatsOpen] = useState(false);
@@ -210,8 +275,18 @@ export default function MapApp() {
   const selectProject = useCallback((p: Record<string, any>) => {
     setTourOn(false);
     setFeaturedOpen(false);
+    setCountryName(null);
     setSelected(p);
     setQueryParam(p.slug ?? null);
+  }, []);
+
+  // Open the country energy-mix panel (input is a project country name).
+  const openCountry = useCallback((projectCountry: string) => {
+    setTourOn(false);
+    setSelected(null);
+    setQueryParam(null);
+    setFeaturedOpen(false);
+    setCountryName(COUNTRY_ALIAS[projectCountry] ?? projectCountry);
   }, []);
 
   const selectCompany = useCallback((coords: [number, number], p: Record<string, any>) => {
@@ -267,6 +342,7 @@ export default function MapApp() {
     const dataPromise = Promise.all([
       fetch('/data/projects.geojson').then((r) => r.json() as Promise<FC>),
       fetch('/data/companies.geojson').then((r) => r.json() as Promise<FC>),
+      fetch('/data/transmission.geojson').then((r) => r.json() as Promise<LineFC>),
     ]);
 
     // Add sources/layers on 'style.load' rather than 'load': 'load' waits for a first
@@ -282,9 +358,9 @@ export default function MapApp() {
       } catch {
         // older maplibre without globe support — flat map is fine
       }
-      const [projects, companies] = await dataPromise;
-      dataRef.current = { projects, companies };
-      addLayers(map, companies, handlersRef);
+      const [projects, companies, transmission] = await dataPromise;
+      dataRef.current = { projects, companies, transmission };
+      addLayers(map, companies, transmission, handlersRef);
       setCompaniesList(companies.features.map((f) => f.properties as CompanyProps));
       setReady(true);
     });
@@ -339,8 +415,11 @@ export default function MapApp() {
     if (map.getLayer('companies-pt')) {
       map.setLayoutProperty('companies-pt', 'visibility', companiesOn ? 'visible' : 'none');
     }
+    for (const id of ['transmission-op', 'transmission-uc', 'transmission-hit']) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', gridOn ? 'visible' : 'none');
+    }
     recomputeStats();
-  }, [ready, techOn, status, minCap, companiesOn, recomputeStats]);
+  }, [ready, techOn, status, minCap, companiesOn, gridOn, recomputeStats]);
 
   // Resolve a ?p=<slug> deep link once data is ready: open its detail + fly there.
   useEffect(() => {
@@ -384,6 +463,7 @@ export default function MapApp() {
     const f = dataRef.current?.projects.features.find((x) => x.properties.name === name);
     if (!map || !f) return;
     setFeaturedOpen(false);
+    setCountryName(null);
     setSelected(f.properties);
     setQueryParam(f.properties.slug ?? null);
     map.flyTo({ center: f.geometry.coordinates, zoom: 6.5, duration: 2200 });
@@ -430,6 +510,8 @@ export default function MapApp() {
               <Controls
                 techOn={techOn}
                 onTech={(t) => setTechOn((s) => ({ ...s, [t]: !s[t] }))}
+                gridOn={gridOn}
+                onGrid={() => setGridOn((v) => !v)}
                 status={status}
                 onStatus={setStatus}
                 minCap={minCap}
@@ -450,6 +532,8 @@ export default function MapApp() {
 
       {!tourOn && selected ? (
         <DetailPanel project={selected} onClose={closeDetail} />
+      ) : !tourOn && countryName ? (
+        <CountryPanel country={countryName} onCountry={setCountryName} onClose={() => setCountryName(null)} />
       ) : !tourOn && featuredOpen ? (
         <FeaturedPanel
           lookup={lookupFeatured}
@@ -507,13 +591,20 @@ export default function MapApp() {
                 <tbody>
                   {stats.byCountry.map((c) => (
                     <tr key={c.country}>
-                      <td>{c.country}</td>
+                      <td>
+                        <button className="sp-country" onClick={() => openCountry(c.country)} title="Show energy mix">
+                          {c.country}
+                        </button>
+                      </td>
                       <td>{c.count}</td>
                       <td>{c.gw.toFixed(1)} GW</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <button className="sp-country-more" onClick={() => openCountry(stats.byCountry[0]?.country || 'United States')}>
+                🌍 Country energy mix — green vs. fossil →
+              </button>
             </div>
           </div>
         )}

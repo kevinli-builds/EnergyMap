@@ -157,6 +157,7 @@ select.mincap {
 .ldot.ring { background: transparent; border: 2px solid #9aa3b2; width: 8px; height: 8px; }
 .ldot.sz-s { width: 6px; height: 6px; }
 .ldot.sz-l { width: 12px; height: 12px; }
+.lline { display: inline-block; width: 18px; height: 0; border-top: 2px solid #fb923c; flex: none; }
 
 /* ---------- bottom stats + panel ---------- */
 .stats-wrap {
@@ -218,6 +219,30 @@ select.mincap {
 .sp-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .sp-table td { padding: 3px 0; border-top: 1px solid var(--border); color: var(--text); }
 .sp-table td:not(:first-child) { text-align: right; color: var(--muted); white-space: nowrap; padding-left: 10px; }
+.sp-country {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  font-size: 11.5px;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline dotted transparent;
+}
+.sp-country:hover { color: var(--battery); text-decoration-color: var(--battery); }
+.sp-country-more {
+  width: 100%;
+  margin-top: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 7px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--battery);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.1);
+}
+.sp-country-more:hover { background: rgba(52, 211, 153, 0.2); }
 
 /* ---------- featured panel ---------- */
 .featured-panel {
@@ -366,6 +391,35 @@ select.mincap {
   background: rgba(255, 255, 255, 0.06);
 }
 .d-copy:hover { background: rgba(255, 255, 255, 0.12); }
+
+/* ---------- country energy panel ---------- */
+.detail-body > .mincap { margin-bottom: 4px; }
+.cp-headline { display: flex; align-items: baseline; gap: 8px; margin: 14px 0 10px; }
+.cp-big { font-size: 30px; font-weight: 800; line-height: 1; }
+.cp-sub { font-size: 12px; color: var(--muted); }
+.cp-year { color: var(--muted); }
+.cp-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.07); }
+.cp-seg { height: 100%; }
+.cp-seg.clean { background: var(--battery); }
+.cp-seg.fossil { background: #6b7280; }
+.cp-key { display: flex; gap: 14px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+.cp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.cp-dot.clean { background: var(--battery); }
+.cp-dot.fossil { background: #6b7280; }
+.cp-reports { margin-top: 16px; }
+.cp-report {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 9px;
+  text-decoration: none;
+  color: #8ab4ff;
+  border: 1px solid rgba(138, 180, 255, 0.35);
+  background: rgba(138, 180, 255, 0.08);
+}
+.cp-report:hover { background: rgba(138, 180, 255, 0.18); }
 
 /* ---------- jobs tab ---------- */
 .jobs { margin-top: 12px; }

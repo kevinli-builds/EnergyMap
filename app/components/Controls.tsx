@@ -18,13 +18,15 @@ const STATUS_OPTIONS: [StatusFilter, string][] = [
 export default function Controls(props: {
   techOn: Record<Tech, boolean>;
   onTech: (t: Tech) => void;
+  gridOn: boolean;
+  onGrid: () => void;
   status: StatusFilter;
   onStatus: (s: StatusFilter) => void;
   minCap: number;
   onMinCap: (n: number) => void;
   onFeatured: () => void;
 }) {
-  const { techOn, onTech, status, onStatus, minCap, onMinCap, onFeatured } = props;
+  const { techOn, onTech, gridOn, onGrid, status, onStatus, minCap, onMinCap, onFeatured } = props;
 
   return (
     <>
@@ -41,6 +43,13 @@ export default function Controls(props: {
               {TECH_LABEL[t]}
             </button>
           ))}
+          <button
+            className={`chip ${gridOn ? 'on' : ''}`}
+            style={{ '--c': '#fb923c' } as React.CSSProperties}
+            onClick={onGrid}
+          >
+            🔌 Grid
+          </button>
         </div>
       </div>
 
@@ -86,6 +95,9 @@ export default function Controls(props: {
               <span key={t} className="ldot" style={{ background: COLORS[t] }} title={TECH_LABEL[t]} />
             ))}
             Colour = technology
+          </div>
+          <div className="legend-row">
+            <span className="lline" /> Transmission &amp; interconnectors
           </div>
         </div>
       </div>
