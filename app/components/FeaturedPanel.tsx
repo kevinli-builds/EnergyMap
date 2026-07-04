@@ -15,14 +15,20 @@ export default function FeaturedPanel(props: {
   lookup: (name: string) => FeaturedLookup | null;
   onSelect: (name: string) => void;
   onClose: () => void;
+  onTour: () => void;
 }) {
   return (
     <div className="featured-panel">
       <div className="featured-head">
         <h2>★ Featured projects</h2>
-        <button onClick={props.onClose} aria-label="Close">
-          ✕
-        </button>
+        <div className="fh-actions">
+          <button className="tour-btn" onClick={props.onTour}>
+            ▶ Tour
+          </button>
+          <button onClick={props.onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
       </div>
       <div className="featured-list">
         {featured.map((f) => {

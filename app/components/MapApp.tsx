@@ -6,7 +6,9 @@ import Controls from './Controls';
 import FeaturedPanel, { FeaturedLookup } from './FeaturedPanel';
 import DetailPanel from './DetailPanel';
 import JobsPanel, { CompanyProps } from './JobsPanel';
-import { COLORS, esc, StatusFilter, Tech, TECHS } from './shared';
+import Intro from './Intro';
+import featured from '../../data/featured.json';
+import { COLORS, esc, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
 
 type PointFeature = {
   type: 'Feature';
@@ -161,7 +163,17 @@ export default function MapApp() {
   const [featuredOpen, setFeaturedOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, any> | null>(null);
   const [companiesList, setCompaniesList] = useState<CompanyProps[]>([]);
-  const [stats, setStats] = useState({ count: 0, gw: 0 });
+  const [hudOpen, setHudOpen] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 640));
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
+  const [tourOn, setTourOn] = useState(false);
+  const [tourItem, setTourItem] = useState<{ name: string; blurb: string } | null>(null);
+  const [stats, setStats] = useState<{
+    count: number;
+    gw: number;
+    byTech: { tech: Tech; gw: number }[];
+    byCountry: { country: string; gw: number; count: number }[];
+  }>({ count: 0, gw: 0, byTech: [], byCountry: [] });
 
   const recomputeStats = useCallback(() => {
     const map = mapRef.current;
@@ -169,18 +181,34 @@ export default function MapApp() {
     const bounds = map.getBounds();
     let count = 0;
     let mw = 0;
+    const techMw: Record<string, number> = {};
+    const countryMw = new Map<string, { gw: number; count: number }>();
     for (const tech of TECHS) {
       for (const f of filteredRef.current[tech]) {
-        if (bounds.contains(f.geometry.coordinates)) {
-          count++;
-          mw += f.properties.capacityMW ?? 0;
-        }
+        if (!bounds.contains(f.geometry.coordinates)) continue;
+        const m = f.properties.capacityMW ?? 0;
+        count++;
+        mw += m;
+        techMw[tech] = (techMw[tech] ?? 0) + m;
+        const c = f.properties.country || '—';
+        const e = countryMw.get(c) ?? { gw: 0, count: 0 };
+        e.gw += m / 1000;
+        e.count++;
+        countryMw.set(c, e);
       }
     }
-    setStats({ count, gw: mw / 1000 });
+    const byTech = TECHS.map((t) => ({ tech: t, gw: (techMw[t] ?? 0) / 1000 }))
+      .filter((x) => x.gw > 0)
+      .sort((a, b) => b.gw - a.gw);
+    const byCountry = [...countryMw.entries()]
+      .map(([country, v]) => ({ country, gw: v.gw, count: v.count }))
+      .sort((a, b) => b.gw - a.gw)
+      .slice(0, 8);
+    setStats({ count, gw: mw / 1000, byTech, byCountry });
   }, []);
 
   const selectProject = useCallback((p: Record<string, any>) => {
+    setTourOn(false);
     setFeaturedOpen(false);
     setSelected(p);
     setQueryParam(p.slug ?? null);
@@ -194,6 +222,24 @@ export default function MapApp() {
   const closeDetail = useCallback(() => {
     setSelected(null);
     setQueryParam(null);
+  }, []);
+
+  // First visit: show the welcome overlay once (unless arriving on a ?p= deep
+  // link — don't cover the project someone was sent to look at).
+  useEffect(() => {
+    try {
+      const deepLinked = new URLSearchParams(window.location.search).has('p');
+      if (!deepLinked && !localStorage.getItem('em.introSeen')) setIntroOpen(true);
+    } catch {
+      // storage unavailable (private mode) — skip the intro rather than loop it
+    }
+  }, []);
+
+  const closeIntro = useCallback(() => {
+    setIntroOpen(false);
+    try {
+      localStorage.setItem('em.introSeen', '1');
+    } catch {}
   }, []);
 
   // Keep the map's click handlers pointing at the latest callbacks.
@@ -307,6 +353,25 @@ export default function MapApp() {
     mapRef.current?.flyTo({ center: f.geometry.coordinates, zoom: 6, duration: 2000 });
   }, [ready]);
 
+  // Featured "tour": auto-fly between highlights every 8s, blurb overlaid.
+  useEffect(() => {
+    if (!tourOn) return;
+    setFeaturedOpen(false);
+    setSelected(null);
+    setQueryParam(null);
+    let i = 0;
+    const step = () => {
+      const item = featured[i % featured.length];
+      i++;
+      setTourItem(item);
+      const f = dataRef.current?.projects.features.find((x) => x.properties.name === item.name);
+      if (f) mapRef.current?.flyTo({ center: f.geometry.coordinates, zoom: 5.5, duration: 4000 });
+    };
+    step();
+    const id = setInterval(step, 8000);
+    return () => clearInterval(id);
+  }, [tourOn]);
+
   const lookupFeatured = useCallback((name: string): FeaturedLookup | null => {
     const f = dataRef.current?.projects.features.find((x) => x.properties.name === name);
     if (!f) return null;
@@ -335,47 +400,127 @@ export default function MapApp() {
   return (
     <div className="map-root">
       <div ref={containerRef} className="map-canvas" />
-      <div className="hud">
-        <h1>⚡ Energy Map</h1>
-        <p className="tagline">The world’s biggest clean-energy projects — and who’s building them</p>
-
-        <div className="tabs">
-          <button className={tab === 'map' ? 'on' : ''} onClick={() => setTab('map')}>
-            🗺 Map
-          </button>
-          <button className={tab === 'jobs' ? 'on' : ''} onClick={() => setTab('jobs')}>
-            🏢 Jobs
-          </button>
+      <div className={`hud ${hudOpen ? '' : 'collapsed'}`}>
+        <div className="hud-head">
+          <h1>⚡ Energy Map</h1>
+          <div className="hud-btns">
+            <button className="hud-toggle" onClick={() => setIntroOpen(true)} aria-label="About this map">
+              ?
+            </button>
+            <button className="hud-toggle" onClick={() => setHudOpen((v) => !v)} aria-label="Toggle panel">
+              {hudOpen ? '▾' : '☰'}
+            </button>
+          </div>
         </div>
 
-        {tab === 'map' ? (
-          <Controls
-            techOn={techOn}
-            onTech={(t) => setTechOn((s) => ({ ...s, [t]: !s[t] }))}
-            status={status}
-            onStatus={setStatus}
-            minCap={minCap}
-            onMinCap={setMinCap}
-            onFeatured={() => setFeaturedOpen((v) => !v)}
-          />
-        ) : (
-          <JobsPanel
-            companies={companiesList}
-            companiesOn={companiesOn}
-            onToggle={() => setCompaniesOn((v) => !v)}
-            onSelect={flyToCompany}
-          />
+        {hudOpen && (
+          <>
+            <p className="tagline">The world’s biggest clean-energy projects — and who’s building them</p>
+
+            <div className="tabs">
+              <button className={tab === 'map' ? 'on' : ''} onClick={() => setTab('map')}>
+                🗺 Map
+              </button>
+              <button className={tab === 'jobs' ? 'on' : ''} onClick={() => setTab('jobs')}>
+                🏢 Jobs
+              </button>
+            </div>
+
+            {tab === 'map' ? (
+              <Controls
+                techOn={techOn}
+                onTech={(t) => setTechOn((s) => ({ ...s, [t]: !s[t] }))}
+                status={status}
+                onStatus={setStatus}
+                minCap={minCap}
+                onMinCap={setMinCap}
+                onFeatured={() => setFeaturedOpen((v) => !v)}
+              />
+            ) : (
+              <JobsPanel
+                companies={companiesList}
+                companiesOn={companiesOn}
+                onToggle={() => setCompaniesOn((v) => !v)}
+                onSelect={flyToCompany}
+              />
+            )}
+          </>
         )}
       </div>
 
-      {selected ? (
+      {!tourOn && selected ? (
         <DetailPanel project={selected} onClose={closeDetail} />
-      ) : featuredOpen ? (
-        <FeaturedPanel lookup={lookupFeatured} onSelect={flyToFeatured} onClose={() => setFeaturedOpen(false)} />
+      ) : !tourOn && featuredOpen ? (
+        <FeaturedPanel
+          lookup={lookupFeatured}
+          onSelect={flyToFeatured}
+          onClose={() => setFeaturedOpen(false)}
+          onTour={() => setTourOn(true)}
+        />
       ) : null}
 
-      <div className="stats">
-        {ready ? `${stats.count} projects · ${stats.gw.toFixed(1)} GW in view` : 'Loading data…'}
+      {introOpen && (
+        <Intro
+          onClose={closeIntro}
+          onTour={() => {
+            closeIntro();
+            setTourOn(true);
+          }}
+        />
+      )}
+
+      {tourOn && tourItem && (
+        <div className="tour-caption">
+          <div className="tc-name">★ {tourItem.name}</div>
+          <div className="tc-blurb">{tourItem.blurb}</div>
+          <button className="tc-stop" onClick={() => setTourOn(false)}>
+            ■ Stop tour
+          </button>
+        </div>
+      )}
+
+      <div className="stats-wrap">
+        {statsOpen && ready && (
+          <div className="stats-panel">
+            <div className="sp-section">
+              <div className="sp-title">Capacity by technology · in view</div>
+              {stats.byTech.length ? (
+                stats.byTech.map((t) => (
+                  <div className="sp-bar-row" key={t.tech}>
+                    <span className="sp-bar-label">{TECH_LABEL[t.tech]}</span>
+                    <span className="sp-bar">
+                      <span
+                        className="sp-bar-fill"
+                        style={{ width: `${(t.gw / (stats.byTech[0].gw || 1)) * 100}%`, background: COLORS[t.tech] }}
+                      />
+                    </span>
+                    <span className="sp-bar-val">{t.gw.toFixed(1)} GW</span>
+                  </div>
+                ))
+              ) : (
+                <div className="sp-empty">Nothing in view.</div>
+              )}
+            </div>
+            <div className="sp-section">
+              <div className="sp-title">Top countries · in view</div>
+              <table className="sp-table">
+                <tbody>
+                  {stats.byCountry.map((c) => (
+                    <tr key={c.country}>
+                      <td>{c.country}</td>
+                      <td>{c.count}</td>
+                      <td>{c.gw.toFixed(1)} GW</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        <button className="stats" onClick={() => setStatsOpen((v) => !v)}>
+          {ready ? `${stats.count} projects · ${stats.gw.toFixed(1)} GW in view` : 'Loading data…'}
+          <span className="stats-caret">{statsOpen ? '▾' : '▴'}</span>
+        </button>
       </div>
     </div>
   );
