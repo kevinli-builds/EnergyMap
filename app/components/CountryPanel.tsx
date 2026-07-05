@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import energyMix from '../../data/energy-mix.json';
 
 type Mix = {
@@ -30,6 +31,22 @@ export default function CountryPanel(props: {
   const slug = slugify(country);
   const clean = m?.lowCarbon ?? 0;
   const fossil = m?.fossil ?? Math.max(0, 100 - clean);
+
+  const [copied, setCopied] = useState(false);
+  useEffect(() => setCopied(false), [country]);
+  const link =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}?c=${encodeURIComponent(country)}`
+      : '';
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // clipboard blocked (insecure context) — ignore
+    }
+  };
 
   return (
     <div className="detail-panel">
@@ -86,6 +103,10 @@ export default function CountryPanel(props: {
                 <dd>{pct(m.fossil)}</dd>
               </div>
             </dl>
+
+            <button className="cp-copy" onClick={copy}>
+              {copied ? '✓ Copied link' : '🔗 Copy link to this country'}
+            </button>
 
             <div className="cp-reports">
               <div className="sp-title">Full reports</div>

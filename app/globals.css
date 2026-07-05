@@ -420,6 +420,19 @@ select.mincap {
   background: rgba(138, 180, 255, 0.08);
 }
 .cp-report:hover { background: rgba(138, 180, 255, 0.18); }
+.cp-copy {
+  width: 100%;
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--text);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+}
+.cp-copy:hover { background: rgba(255, 255, 255, 0.12); }
 
 /* ---------- jobs tab ---------- */
 .jobs { margin-top: 12px; }
