@@ -45,9 +45,12 @@ const iC = col('country'),
   iRen = col('renewables_share_elec'),
   iNuc = col('nuclear_share_elec'),
   iLow = col('low_carbon_share_elec'),
-  iFos = col('fossil_share_elec');
+  iFos = col('fossil_share_elec'),
+  iDemand = col('electricity_demand'),
+  iGen = col('electricity_generation');
 
 const num = (v) => (v === '' || v == null ? null : Math.round(parseFloat(v) * 10) / 10);
+const twh = (v) => (v === '' || v == null ? null : Math.round(parseFloat(v)));
 const latest = new Map();
 for (let i = 1; i < lines.length; i++) {
   if (!lines[i]) continue;
@@ -66,6 +69,8 @@ for (let i = 1; i < lines.length; i++) {
       nuclear: num(c[iNuc]),
       lowCarbon: num(c[iLow]),
       fossil: num(c[iFos]),
+      demand: twh(c[iDemand]),
+      generation: twh(c[iGen]),
     });
   }
 }

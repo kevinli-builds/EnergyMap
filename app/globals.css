@@ -144,6 +144,32 @@ select.mincap {
 }
 .featured-btn:hover { background: rgba(251, 191, 36, 0.22); }
 
+.timeline { display: flex; align-items: center; gap: 8px; }
+.tl-play {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tl-play:hover { background: rgba(255, 255, 255, 0.16); }
+.tl-range { flex: 1; min-width: 0; accent-color: var(--battery); cursor: pointer; }
+.tl-year {
+  flex: none;
+  width: 28px;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .legend { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--muted); }
 .legend-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .ldot {
@@ -406,6 +432,9 @@ select.mincap {
 .cp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 .cp-dot.clean { background: var(--battery); }
 .cp-dot.fossil { background: #6b7280; }
+.cp-total { margin-top: 12px; font-size: 12.5px; color: #c3cad6; line-height: 1.5; }
+.cp-total b { color: var(--text); font-weight: 700; }
+.cp-total-green { color: var(--battery); font-weight: 600; }
 .cp-reports { margin-top: 16px; }
 .cp-report {
   display: block;

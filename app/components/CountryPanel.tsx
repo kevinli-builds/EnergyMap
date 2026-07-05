@@ -10,6 +10,8 @@ type Mix = {
   nuclear: number | null;
   lowCarbon: number | null;
   fossil: number | null;
+  demand: number | null;
+  generation: number | null;
 };
 const MIX: Record<string, Mix> = energyMix as any;
 const COUNTRIES = Object.keys(MIX).sort();
@@ -88,6 +90,19 @@ export default function CountryPanel(props: {
                 <span className="cp-dot fossil" /> Fossil {pct(m.fossil)}
               </span>
             </div>
+
+            {(m.demand ?? m.generation) != null && (
+              <div className="cp-total">
+                ⚡ <b>{(m.demand ?? m.generation)!.toLocaleString()} TWh</b>{' '}
+                {m.demand != null ? 'used' : 'generated'} per year
+                {m.lowCarbon != null && (
+                  <>
+                    {' '}
+                    · <span className="cp-total-green">{Math.round((m.lowCarbon / 100) * (m.demand ?? m.generation)!).toLocaleString()} TWh clean</span>
+                  </>
+                )}
+              </div>
+            )}
 
             <dl className="d-rows">
               <div className="d-row">

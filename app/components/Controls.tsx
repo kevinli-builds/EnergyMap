@@ -24,9 +24,31 @@ export default function Controls(props: {
   onStatus: (s: StatusFilter) => void;
   minCap: number;
   onMinCap: (n: number) => void;
+  year: number;
+  yearMin: number;
+  yearMax: number;
+  onYear: (y: number) => void;
+  playing: boolean;
+  onPlay: () => void;
   onFeatured: () => void;
 }) {
-  const { techOn, onTech, gridOn, onGrid, status, onStatus, minCap, onMinCap, onFeatured } = props;
+  const {
+    techOn,
+    onTech,
+    gridOn,
+    onGrid,
+    status,
+    onStatus,
+    minCap,
+    onMinCap,
+    year,
+    yearMin,
+    yearMax,
+    onYear,
+    playing,
+    onPlay,
+    onFeatured,
+  } = props;
 
   return (
     <>
@@ -73,6 +95,24 @@ export default function Controls(props: {
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="section">
+        <div className="section-label">Built by year {year >= yearMax ? '· all' : `· up to ${year}`}</div>
+        <div className="timeline">
+          <button className="tl-play" onClick={onPlay} aria-label={playing ? 'Pause' : 'Play build-out'}>
+            {playing ? '⏸' : '▶'}
+          </button>
+          <input
+            type="range"
+            className="tl-range"
+            min={yearMin}
+            max={yearMax}
+            value={year}
+            onChange={(e) => onYear(Number(e.target.value))}
+          />
+          <span className="tl-year">{year >= yearMax ? 'All' : year}</span>
+        </div>
       </div>
 
       <button className="featured-btn" onClick={onFeatured}>

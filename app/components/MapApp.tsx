@@ -27,6 +27,12 @@ const COUNTRY_ALIAS: Record<string, string> = {
 
 const GRID_COLOR = '#fb923c';
 
+// Commissioning-year timeline. Projects without a year are always shown (curated
+// flagships lack one) — see the note in the UI. Max sits a few years ahead so
+// under-construction projects with future start years aren't clipped at "All".
+const YEAR_MIN = 2000;
+const YEAR_MAX = new Date().getFullYear() + 3;
+
 type ClickHandlers = {
   selectProject: (p: Record<string, any>) => void;
   selectCompany: (coords: [number, number], p: Record<string, any>) => void;
@@ -241,6 +247,8 @@ export default function MapApp() {
   const [minCap, setMinCap] = useState(0);
   const [companiesOn, setCompaniesOn] = useState(true);
   const [gridOn, setGridOn] = useState(true);
+  const [year, setYear] = useState(YEAR_MAX);
+  const [playing, setPlaying] = useState(false);
   const [featuredOpen, setFeaturedOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, any> | null>(null);
   const [countryName, setCountryName] = useState<string | null>(null);
@@ -317,6 +325,11 @@ export default function MapApp() {
     setCountryName(null);
     setParams({ c: null });
   }, []);
+
+  const togglePlay = () => {
+    if (!playing && year >= YEAR_MAX) setYear(YEAR_MIN); // rewind if starting from the end
+    setPlaying((p) => !p);
+  };
 
   const selectCompany = useCallback((coords: [number, number], p: Record<string, any>) => {
     const map = mapRef.current;
@@ -427,13 +440,15 @@ export default function MapApp() {
     const map = mapRef.current;
     const data = dataRef.current;
     if (!ready || !map || !data) return;
+    const yearActive = year < YEAR_MAX; // "All" position applies no year filter
     for (const tech of TECHS) {
       const feats = techOn[tech]
         ? data.projects.features.filter(
             (f) =>
               f.properties.tech === tech &&
               (status === 'all' || f.properties.status === status) &&
-              (f.properties.capacityMW ?? 0) >= minCap
+              (f.properties.capacityMW ?? 0) >= minCap &&
+              (!yearActive || f.properties.year == null || f.properties.year <= year)
           )
         : [];
       filteredRef.current[tech] = feats;
@@ -449,7 +464,7 @@ export default function MapApp() {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', gridOn ? 'visible' : 'none');
     }
     recomputeStats();
-  }, [ready, techOn, status, minCap, companiesOn, gridOn, recomputeStats]);
+  }, [ready, techOn, status, minCap, companiesOn, gridOn, year, recomputeStats]);
 
   // Resolve deep links once data is ready: ?p=<slug> opens a project (and flies
   // there); otherwise ?c=<country> opens the energy-mix panel.
@@ -488,6 +503,16 @@ export default function MapApp() {
     const id = setInterval(step, 8000);
     return () => clearInterval(id);
   }, [tourOn]);
+
+  // Timeline playback: advance the year each tick while playing, stop at the end.
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => setYear((y) => Math.min(YEAR_MAX, y + 1)), 650);
+    return () => clearInterval(id);
+  }, [playing]);
+  useEffect(() => {
+    if (playing && year >= YEAR_MAX) setPlaying(false);
+  }, [playing, year]);
 
   const lookupFeatured = useCallback((name: string): FeaturedLookup | null => {
     const f = dataRef.current?.projects.features.find((x) => x.properties.name === name);
@@ -554,6 +579,15 @@ export default function MapApp() {
                 onStatus={setStatus}
                 minCap={minCap}
                 onMinCap={setMinCap}
+                year={year}
+                yearMin={YEAR_MIN}
+                yearMax={YEAR_MAX}
+                onYear={(y) => {
+                  setPlaying(false);
+                  setYear(y);
+                }}
+                playing={playing}
+                onPlay={togglePlay}
                 onFeatured={() => setFeaturedOpen((v) => !v)}
               />
             ) : (
