@@ -6,6 +6,7 @@ import Controls from './Controls';
 import FeaturedPanel, { FeaturedLookup } from './FeaturedPanel';
 import DetailPanel from './DetailPanel';
 import JobsPanel, { CompanyProps } from './JobsPanel';
+import ParksPanel, { ParkProps } from './ParksPanel';
 import Intro from './Intro';
 import CountryPanel from './CountryPanel';
 import featured from '../../data/featured.json';
@@ -36,6 +37,7 @@ const YEAR_MAX = new Date().getFullYear() + 3;
 type ClickHandlers = {
   selectProject: (p: Record<string, any>) => void;
   selectCompany: (coords: [number, number], p: Record<string, any>) => void;
+  selectPark: (coords: [number, number], p: Record<string, any>) => void;
 };
 
 const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
@@ -79,6 +81,30 @@ function openTransmissionPopup(map: maplibregl.Map, lngLat: maplibregl.LngLatLik
     ${p.note ? `<div class="pp-note">${esc(p.note)}</div>` : ''}
   </div>`;
   new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(lngLat).setHTML(html).addTo(map);
+}
+
+function openParkPopup(map: maplibregl.Map, coords: [number, number], p: Record<string, any>) {
+  const visit = p.visitable
+    ? '<span class="badge op">✓ Open to visitors</span>'
+    : '<span class="badge uc">Restricted access</span>';
+  // Prefer an official site; else link the Wikipedia article if OSM has one.
+  let link = '';
+  if (p.website) {
+    link = `<a href="${esc(p.website)}" target="_blank" rel="noopener noreferrer">Official site ↗</a>`;
+  } else if (p.wikipedia) {
+    // OSM wikipedia tag is "lang:Title"
+    const [lang, ...rest] = String(p.wikipedia).split(':');
+    const title = rest.join(':') || lang;
+    const url = `https://${rest.length ? lang : 'en'}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+    link = `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Wikipedia ↗</a>`;
+  }
+  const html = `<div class="pp">
+    <div class="pp-title">${esc(p.name)}</div>
+    <div class="pp-sub">${esc(p.type)}</div>
+    ${visit}
+    ${link}
+  </div>`;
+  new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(coords).setHTML(html).addTo(map);
 }
 
 function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, handlers: React.MutableRefObject<ClickHandlers>) {
@@ -130,6 +156,60 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
   map.on('click', 'transmission-hit', (e) => {
     const f = e.features?.[0];
     if (f) openTransmissionPopup(map, e.lngLat, f.properties as any);
+  });
+
+  // Protected areas (national parks, reserves) — clustered like projects. The
+  // source starts empty and is filled lazily when the Parks tab is first opened,
+  // so the ~9 MB dataset never touches the initial page load. Hidden by default.
+  map.addSource('parks', {
+    type: 'geojson',
+    data: EMPTY as any,
+    cluster: true,
+    clusterMaxZoom: 7,
+    clusterRadius: 44,
+  });
+  map.addLayer({
+    id: 'parks-cluster',
+    type: 'circle',
+    source: 'parks',
+    filter: ['has', 'point_count'],
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-color': COLORS.park,
+      'circle-opacity': 0.45,
+      'circle-stroke-color': COLORS.park,
+      'circle-stroke-width': 1.4,
+      'circle-stroke-opacity': 0.85,
+      'circle-radius': ['interpolate', ['linear'], ['get', 'point_count'], 2, 12, 50, 20, 1000, 32],
+    } as any,
+  });
+  map.addLayer({
+    id: 'parks-count',
+    type: 'symbol',
+    source: 'parks',
+    filter: ['has', 'point_count'],
+    layout: {
+      'text-field': '{point_count_abbreviated}',
+      'text-size': 11,
+      'text-font': ['Montserrat Regular'],
+      visibility: 'none',
+    } as any,
+    paint: { 'text-color': '#0b0e14' } as any,
+  });
+  map.addLayer({
+    id: 'parks-pt',
+    type: 'circle',
+    source: 'parks',
+    filter: ['!', ['has', 'point_count']],
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.2, 8, 5],
+      // visitable = filled green; restricted/strict = hollow ring
+      'circle-color': ['case', ['get', 'visitable'], COLORS.park, 'rgba(0,0,0,0)'],
+      'circle-opacity': 0.85,
+      'circle-stroke-color': COLORS.park,
+      'circle-stroke-width': ['case', ['get', 'visitable'], 0.6, 1.6],
+    } as any,
   });
 
   for (const tech of TECHS) {
@@ -198,7 +278,13 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
     },
   });
 
-  const pointLayers = [...TECHS.map((t) => `proj-${t}-pt`), ...TECHS.map((t) => `proj-${t}-cluster`), 'companies-pt'];
+  const pointLayers = [
+    ...TECHS.map((t) => `proj-${t}-pt`),
+    ...TECHS.map((t) => `proj-${t}-cluster`),
+    'companies-pt',
+    'parks-pt',
+    'parks-cluster',
+  ];
   for (const layer of pointLayers) {
     map.on('mouseenter', layer, () => {
       map.getCanvas().style.cursor = 'pointer';
@@ -227,6 +313,18 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
     if (!f) return;
     handlers.current.selectCompany((f.geometry as any).coordinates, f.properties as any);
   });
+  map.on('click', 'parks-cluster', async (e) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    const src = map.getSource('parks') as maplibregl.GeoJSONSource;
+    const zoom = await src.getClusterExpansionZoom((f.properties as any).cluster_id);
+    map.easeTo({ center: (f.geometry as any).coordinates, zoom: zoom + 0.5 });
+  });
+  map.on('click', 'parks-pt', (e) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    handlers.current.selectPark((f.geometry as any).coordinates, f.properties as any);
+  });
 }
 
 export default function MapApp() {
@@ -236,11 +334,15 @@ export default function MapApp() {
   const filteredRef = useRef<Record<Tech, PointFeature[]>>(
     Object.fromEntries(TECHS.map((t) => [t, [] as PointFeature[]])) as Record<Tech, PointFeature[]>
   );
-  const handlersRef = useRef<ClickHandlers>({ selectProject: () => {}, selectCompany: () => {} });
+  const handlersRef = useRef<ClickHandlers>({
+    selectProject: () => {},
+    selectCompany: () => {},
+    selectPark: () => {},
+  });
 
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<'projects' | 'jobs'>('projects');
-  // Each tab owns its half of the globe; `showAll` un-gates both at once.
+  const [tab, setTab] = useState<'projects' | 'jobs' | 'parks'>('projects');
+  // Each tab owns its slice of the globe; `showAll` un-gates them all at once.
   const [showAll, setShowAll] = useState(false);
   const [techOn, setTechOn] = useState<Record<Tech, boolean>>(
     () => Object.fromEntries(TECHS.map((t) => [t, true])) as Record<Tech, boolean>
@@ -255,6 +357,10 @@ export default function MapApp() {
   const [selected, setSelected] = useState<Record<string, any> | null>(null);
   const [countryName, setCountryName] = useState<string | null>(null);
   const [companiesList, setCompaniesList] = useState<CompanyProps[]>([]);
+  const [parksList, setParksList] = useState<ParkProps[]>([]);
+  const [parksLoading, setParksLoading] = useState(false);
+  const [visitableOnly, setVisitableOnly] = useState(false);
+  const parksLoadedRef = useRef(false);
   const [hudOpen, setHudOpen] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 640));
   const [statsOpen, setStatsOpen] = useState(false);
   const [introOpen, setIntroOpen] = useState(false);
@@ -338,6 +444,11 @@ export default function MapApp() {
     if (map) openCompanyPopup(map, coords, p);
   }, []);
 
+  const selectPark = useCallback((coords: [number, number], p: Record<string, any>) => {
+    const map = mapRef.current;
+    if (map) openParkPopup(map, coords, p);
+  }, []);
+
   const closeDetail = useCallback(() => {
     setSelected(null);
     setParams({ p: null });
@@ -363,7 +474,7 @@ export default function MapApp() {
   }, []);
 
   // Keep the map's click handlers pointing at the latest callbacks.
-  handlersRef.current = { selectProject, selectCompany };
+  handlersRef.current = { selectProject, selectCompany, selectPark };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -473,8 +584,54 @@ export default function MapApp() {
     for (const id of ['transmission-glow', 'transmission-op', 'transmission-uc', 'transmission-hit']) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showProjects && gridOn ? 'visible' : 'none');
     }
+    const showParks = tab === 'parks' || showAll;
+    for (const id of ['parks-cluster', 'parks-count', 'parks-pt']) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showParks ? 'visible' : 'none');
+    }
+    if (map.getLayer('parks-pt')) {
+      map.setFilter(
+        'parks-pt',
+        visitableOnly
+          ? ['all', ['!', ['has', 'point_count']], ['==', ['get', 'visitable'], true]]
+          : ['!', ['has', 'point_count']]
+      );
+    }
     recomputeStats();
-  }, [ready, techOn, status, minCap, companiesOn, gridOn, year, tab, showAll, recomputeStats]);
+  }, [ready, techOn, status, minCap, companiesOn, gridOn, year, tab, showAll, visitableOnly, recomputeStats]);
+
+  // Lazy-load the ~9 MB protected-areas dataset the first time the Parks tab (or
+  // "show all") needs it, then feed it into the map source + the panel list. Kept
+  // off the initial page load since most visitors never open Parks.
+  useEffect(() => {
+    if (!ready) return;
+    if ((tab !== 'parks' && !showAll) || parksLoadedRef.current) return;
+    parksLoadedRef.current = true;
+    setParksLoading(true);
+    fetch('/data/parks.geojson')
+      .then((r) => r.json() as Promise<FC>)
+      .then((fc) => {
+        const map = mapRef.current;
+        (map?.getSource('parks') as maplibregl.GeoJSONSource | undefined)?.setData(fc as any);
+        // Clustering 44k points blocks briefly; nudge a repaint so the globe
+        // doesn't sit blank until the next interaction.
+        map?.triggerRepaint();
+        setParksList(
+          fc.features.map((f) => ({
+            name: f.properties.name,
+            type: f.properties.type,
+            visitable: !!f.properties.visitable,
+            coordinates: f.geometry.coordinates,
+            iucn: f.properties.iucn,
+            website: f.properties.website,
+            wikipedia: f.properties.wikipedia,
+          }))
+        );
+      })
+      .catch(() => {
+        parksLoadedRef.current = false; // let a later activation retry
+      })
+      .finally(() => setParksLoading(false));
+  }, [ready, tab, showAll]);
 
   // Resolve deep links once data is ready: ?p=<slug> opens a project (and flies
   // there); otherwise ?c=<country> opens the energy-mix panel.
@@ -550,6 +707,13 @@ export default function MapApp() {
     map.once('moveend', () => openCompanyPopup(map, f.geometry.coordinates, f.properties));
   }, []);
 
+  const flyToPark = useCallback((p: ParkProps) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({ center: p.coordinates, zoom: 6, duration: 1800 });
+    map.once('moveend', () => openParkPopup(map, p.coordinates, p as any));
+  }, []);
+
   return (
     <div className="map-root">
       <div ref={containerRef} className="map-canvas" />
@@ -577,9 +741,12 @@ export default function MapApp() {
               <button className={tab === 'jobs' ? 'on' : ''} onClick={() => setTab('jobs')}>
                 🏢 Jobs
               </button>
+              <button className={tab === 'parks' ? 'on' : ''} onClick={() => setTab('parks')}>
+                🌲 Parks
+              </button>
             </div>
 
-            <label className="show-all" title="Show both projects and jobs on the globe at once">
+            <label className="show-all" title="Show projects, jobs and parks on the globe at once">
               <input type="checkbox" checked={showAll} onChange={() => setShowAll((v) => !v)} />
               Show all on the globe
             </label>
@@ -605,12 +772,20 @@ export default function MapApp() {
                 onPlay={togglePlay}
                 onFeatured={() => setFeaturedOpen((v) => !v)}
               />
-            ) : (
+            ) : tab === 'jobs' ? (
               <JobsPanel
                 companies={companiesList}
                 companiesOn={companiesOn}
                 onToggle={() => setCompaniesOn((v) => !v)}
                 onSelect={flyToCompany}
+              />
+            ) : (
+              <ParksPanel
+                parks={parksList}
+                loading={parksLoading}
+                visitableOnly={visitableOnly}
+                onToggleVisitable={() => setVisitableOnly((v) => !v)}
+                onSelect={flyToPark}
               />
             )}
           </>

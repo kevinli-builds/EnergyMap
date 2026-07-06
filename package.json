@@ -10,6 +10,7 @@
     "data": "node scripts/build-data.mjs",
     "jobs": "node scripts/fetch-jobs.mjs",
     "energy": "node scripts/build-energy.mjs",
+    "parks": "node scripts/build-parks.mjs",
     "import:gem": "node scripts/import-gem.mjs",
     "xlsx2csv": "node scripts/xlsx-to-csv.mjs",
     "test:xlsx": "node scripts/xlsx.test.mjs"
