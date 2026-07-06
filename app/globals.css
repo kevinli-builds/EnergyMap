@@ -129,6 +129,12 @@ select.mincap {
   color: var(--text);
   border: 1px solid var(--border);
 }
+/* The open option list renders on the OS's default (white) surface; without an
+   explicit colour the light --text is unreadable. Pin both to match the theme. */
+select.mincap option {
+  background: #151a24;
+  color: var(--text);
+}
 
 .featured-btn {
   width: 100%;
@@ -297,6 +303,21 @@ select.mincap {
 }
 .featured-head h2 { margin: 0; font-size: 14px; }
 .featured-head button { background: none; border: 0; color: var(--muted); font-size: 16px; cursor: pointer; }
+/* Close (✕): give it a real, discoverable tap target — the bare muted glyph was
+   easy to miss, especially on touch. */
+.featured-head button[aria-label='Close'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -6px -6px -6px 0;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+}
+.featured-head button[aria-label='Close']:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 .fh-actions { display: flex; align-items: center; gap: 6px; }
 .featured-head .tour-btn {
   font-size: 11px;

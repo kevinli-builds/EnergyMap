@@ -36,6 +36,15 @@ export default function CountryPanel(props: {
 
   const [copied, setCopied] = useState(false);
   useEffect(() => setCopied(false), [country]);
+
+  // Esc closes the panel — a close affordance users reach for reflexively.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const link =
     typeof window !== 'undefined'
       ? `${window.location.origin}${window.location.pathname}?c=${encodeURIComponent(country)}`
