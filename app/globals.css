@@ -85,6 +85,20 @@ html, body {
 }
 .tabs button.on { background: rgba(255, 255, 255, 0.12); color: var(--text); }
 
+/* Opt-out of the per-tab globe filtering: show projects + jobs together. */
+.show-all {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.show-all input { accent-color: var(--battery); cursor: pointer; }
+.show-all:hover { color: var(--text); }
+
 .section { margin-top: 12px; }
 .section-label {
   font-size: 10px;

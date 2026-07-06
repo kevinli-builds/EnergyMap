@@ -239,7 +239,9 @@ export default function MapApp() {
   const handlersRef = useRef<ClickHandlers>({ selectProject: () => {}, selectCompany: () => {} });
 
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<'map' | 'jobs'>('map');
+  const [tab, setTab] = useState<'projects' | 'jobs'>('projects');
+  // Each tab owns its half of the globe; `showAll` un-gates both at once.
+  const [showAll, setShowAll] = useState(false);
   const [techOn, setTechOn] = useState<Record<Tech, boolean>>(
     () => Object.fromEntries(TECHS.map((t) => [t, true])) as Record<Tech, boolean>
   );
@@ -441,6 +443,9 @@ export default function MapApp() {
     const data = dataRef.current;
     if (!ready || !map || !data) return;
     const yearActive = year < YEAR_MAX; // "All" position applies no year filter
+    // The active tab decides which half of the globe is shown; "show all" un-gates both.
+    const showProjects = tab === 'projects' || showAll;
+    const showJobs = tab === 'jobs' || showAll;
     for (const tech of TECHS) {
       const feats = techOn[tech]
         ? data.projects.features.filter(
@@ -456,15 +461,20 @@ export default function MapApp() {
         type: 'FeatureCollection',
         features: feats,
       } as any);
+      // Source data stays filter-accurate (stats read it); the tab gates visibility.
+      for (const suffix of ['pt', 'cluster', 'count']) {
+        const id = `proj-${tech}-${suffix}`;
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showProjects ? 'visible' : 'none');
+      }
     }
     if (map.getLayer('companies-pt')) {
-      map.setLayoutProperty('companies-pt', 'visibility', companiesOn ? 'visible' : 'none');
+      map.setLayoutProperty('companies-pt', 'visibility', showJobs && companiesOn ? 'visible' : 'none');
     }
     for (const id of ['transmission-glow', 'transmission-op', 'transmission-uc', 'transmission-hit']) {
-      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', gridOn ? 'visible' : 'none');
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showProjects && gridOn ? 'visible' : 'none');
     }
     recomputeStats();
-  }, [ready, techOn, status, minCap, companiesOn, gridOn, year, recomputeStats]);
+  }, [ready, techOn, status, minCap, companiesOn, gridOn, year, tab, showAll, recomputeStats]);
 
   // Resolve deep links once data is ready: ?p=<slug> opens a project (and flies
   // there); otherwise ?c=<country> opens the energy-mix panel.
@@ -561,15 +571,20 @@ export default function MapApp() {
             <p className="tagline">The world’s biggest clean-energy projects — and who’s building them</p>
 
             <div className="tabs">
-              <button className={tab === 'map' ? 'on' : ''} onClick={() => setTab('map')}>
-                🗺 Map
+              <button className={tab === 'projects' ? 'on' : ''} onClick={() => setTab('projects')}>
+                🗺 Projects
               </button>
               <button className={tab === 'jobs' ? 'on' : ''} onClick={() => setTab('jobs')}>
                 🏢 Jobs
               </button>
             </div>
 
-            {tab === 'map' ? (
+            <label className="show-all" title="Show both projects and jobs on the globe at once">
+              <input type="checkbox" checked={showAll} onChange={() => setShowAll((v) => !v)} />
+              Show all on the globe
+            </label>
+
+            {tab === 'projects' ? (
               <Controls
                 techOn={techOn}
                 onTech={(t) => setTechOn((s) => ({ ...s, [t]: !s[t] }))}
@@ -635,6 +650,7 @@ export default function MapApp() {
         </div>
       )}
 
+      {(tab === 'projects' || showAll) && (
       <div className="stats-wrap">
         {statsOpen && ready && (
           <div className="stats-panel">
@@ -685,6 +701,7 @@ export default function MapApp() {
           <span className="stats-caret">{statsOpen ? '▾' : '▴'}</span>
         </button>
       </div>
+      )}
     </div>
   );
 }
