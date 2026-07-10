@@ -22,15 +22,21 @@ const ENDPOINTS = [
 ];
 
 // `out center tags` returns a single centroid + the tags for each way/relation,
-// which keeps the payload small. We require a name and skip tiny way-level
-// nature_reserves (relations are the notable, mappable ones) to bound the size.
+// which keeps the payload small. We keep ALL national parks and IUCN-II areas,
+// but only NOTABLE nature reserves — those OSM has linked to Wikidata/Wikipedia.
+// That drops the tens of thousands of tiny local reserves (which bloat the file
+// and clutter the globe) while keeping the ones worth visiting.
+//
+// Want the full firehose of every mapped reserve? Swap the two wikidata/wikipedia
+// nature_reserve lines below for a single:  relation["leisure"="nature_reserve"]["name"];
 const QUERY = `
 [out:json][timeout:900];
 (
   relation["boundary"="national_park"]["name"];
   way["boundary"="national_park"]["name"];
   relation["boundary"="protected_area"]["protect_class"~"^(2|II)$"]["name"];
-  relation["leisure"="nature_reserve"]["name"];
+  relation["leisure"="nature_reserve"]["name"]["wikidata"];
+  relation["leisure"="nature_reserve"]["name"]["wikipedia"];
 );
 out center tags;
 `;
