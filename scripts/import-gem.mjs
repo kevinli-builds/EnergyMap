@@ -58,9 +58,9 @@ const file = arg('--file');
 const tech = arg('--tech');
 const sheet = arg('--sheet');
 const minMW = Number(arg('--min', '200'));
-if (!file || !['solar', 'wind', 'battery', 'geothermal', 'hydro'].includes(tech)) {
+if (!file || !['solar', 'wind', 'battery', 'geothermal', 'hydro', 'nuclear'].includes(tech)) {
   console.error(
-    'Usage: npm run import:gem -- --file <export.xlsx|.csv> --tech <solar|wind|battery|geothermal|hydro> [--min 200] [--sheet "Name"]'
+    'Usage: npm run import:gem -- --file <export.xlsx|.csv> --tech <solar|wind|battery|geothermal|hydro|nuclear> [--min 200] [--sheet "Name"]'
   );
   process.exit(1);
 }

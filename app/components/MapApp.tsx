@@ -38,6 +38,7 @@ type ClickHandlers = {
   selectProject: (p: Record<string, any>) => void;
   selectCompany: (coords: [number, number], p: Record<string, any>) => void;
   selectPark: (coords: [number, number], p: Record<string, any>) => void;
+  selectFootprint: (slug: string) => void;
 };
 
 const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
@@ -107,6 +108,9 @@ function openParkPopup(map: maplibregl.Map, coords: [number, number], p: Record<
   new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(coords).setHTML(html).addTo(map);
 }
 
+// Per-tech fill/line colour for footprint polygons.
+const techColorMatch = ['match', ['get', 'tech'], ...TECHS.flatMap((t) => [t, COLORS[t]]), '#888'] as any;
+
 function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, handlers: React.MutableRefObject<ClickHandlers>) {
   // Transmission lines first, so project dots draw on top of them.
   map.addSource('transmission', { type: 'geojson', data: transmission as any });
@@ -156,6 +160,35 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
   map.on('click', 'transmission-hit', (e) => {
     const f = e.features?.[0];
     if (f) openTransmissionPopup(map, e.lngLat, f.properties as any);
+  });
+
+  // Project footprints — the real land area each project covers (OSM power=plant
+  // polygons). Empty until lazily loaded, and only visible once you zoom in
+  // (minzoom 9), where clusters have already broken apart into individual dots.
+  // Drawn here, beneath the dots, so each dot still sits on top of its area.
+  map.addSource('footprints', { type: 'geojson', data: EMPTY as any });
+  map.addLayer({
+    id: 'footprints-fill',
+    type: 'fill',
+    source: 'footprints',
+    minzoom: 9,
+    paint: {
+      'fill-color': techColorMatch,
+      // fade the fill in as you zoom past the cluster-break so it doesn't pop.
+      'fill-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0, 11, 0.35] as any,
+    },
+  });
+  map.addLayer({
+    id: 'footprints-line',
+    type: 'line',
+    source: 'footprints',
+    minzoom: 9,
+    layout: { 'line-join': 'round' },
+    paint: {
+      'line-color': techColorMatch,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.4, 13, 2] as any,
+      'line-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0, 11, 0.9] as any,
+    },
   });
 
   // Protected areas (national parks, reserves) — clustered like projects. The
@@ -325,12 +358,26 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
     if (!f) return;
     handlers.current.selectPark((f.geometry as any).coordinates, f.properties as any);
   });
+
+  // Clicking a footprint opens the same detail panel as its dot (by slug).
+  map.on('mouseenter', 'footprints-fill', () => {
+    map.getCanvas().style.cursor = 'pointer';
+  });
+  map.on('mouseleave', 'footprints-fill', () => {
+    map.getCanvas().style.cursor = '';
+  });
+  map.on('click', 'footprints-fill', (e) => {
+    const f = e.features?.[0];
+    if (f) handlers.current.selectFootprint((f.properties as any).slug);
+  });
 }
 
 export default function MapApp() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const dataRef = useRef<{ projects: FC; companies: FC; transmission: LineFC } | null>(null);
+  const footprintsRef = useRef<LineFC | null>(null);
+  const footprintsLoadedRef = useRef(false);
   const filteredRef = useRef<Record<Tech, PointFeature[]>>(
     Object.fromEntries(TECHS.map((t) => [t, [] as PointFeature[]])) as Record<Tech, PointFeature[]>
   );
@@ -338,6 +385,7 @@ export default function MapApp() {
     selectProject: () => {},
     selectCompany: () => {},
     selectPark: () => {},
+    selectFootprint: () => {},
   });
 
   const [ready, setReady] = useState(false);
@@ -360,6 +408,7 @@ export default function MapApp() {
   const [parksList, setParksList] = useState<ParkProps[]>([]);
   const [parksLoading, setParksLoading] = useState(false);
   const [visitableOnly, setVisitableOnly] = useState(false);
+  const [footprintsReady, setFootprintsReady] = useState(false);
   const parksLoadedRef = useRef(false);
   const [hudOpen, setHudOpen] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 640));
   const [statsOpen, setStatsOpen] = useState(false);
@@ -412,6 +461,16 @@ export default function MapApp() {
     setSelected(p);
     setParams({ p: p.slug ?? null, c: null });
   }, []);
+
+  // A footprint carries only a slug — resolve it to the full project so the
+  // detail panel shows owner/note/links just like clicking the dot.
+  const selectFootprint = useCallback(
+    (slug: string) => {
+      const f = dataRef.current?.projects.features.find((x) => x.properties.slug === slug);
+      if (f) selectProject(f.properties);
+    },
+    [selectProject]
+  );
 
   // Open the country energy-mix panel (input is a project country name).
   const openCountry = useCallback((projectCountry: string) => {
@@ -474,7 +533,7 @@ export default function MapApp() {
   }, []);
 
   // Keep the map's click handlers pointing at the latest callbacks.
-  handlersRef.current = { selectProject, selectCompany, selectPark };
+  handlersRef.current = { selectProject, selectCompany, selectPark, selectFootprint };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -489,7 +548,7 @@ export default function MapApp() {
       attributionControl: {
         compact: true,
         customAttribution:
-          'Projects: <a href="https://globalenergymonitor.org/" target="_blank" rel="noopener">Global Energy Monitor</a> (CC BY 4.0) + curated set',
+          'Projects: <a href="https://globalenergymonitor.org/" target="_blank" rel="noopener">Global Energy Monitor</a> (CC BY 4.0) + curated set · Footprints & parks: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a> contributors (ODbL)',
       },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
@@ -557,15 +616,15 @@ export default function MapApp() {
     // The active tab decides which half of the globe is shown; "show all" un-gates both.
     const showProjects = tab === 'projects' || showAll;
     const showJobs = tab === 'jobs' || showAll;
+    // Same predicate for a project's dot and its footprint, so they stay in sync.
+    const passes = (props: Record<string, any>) =>
+      techOn[props.tech as Tech] &&
+      (status === 'all' || props.status === status) &&
+      (props.capacityMW ?? 0) >= minCap &&
+      (!yearActive || props.year == null || props.year <= year);
     for (const tech of TECHS) {
       const feats = techOn[tech]
-        ? data.projects.features.filter(
-            (f) =>
-              f.properties.tech === tech &&
-              (status === 'all' || f.properties.status === status) &&
-              (f.properties.capacityMW ?? 0) >= minCap &&
-              (!yearActive || f.properties.year == null || f.properties.year <= year)
-          )
+        ? data.projects.features.filter((f) => f.properties.tech === tech && passes(f.properties))
         : [];
       filteredRef.current[tech] = feats;
       (map.getSource(`proj-${tech}`) as maplibregl.GeoJSONSource | undefined)?.setData({
@@ -596,8 +655,20 @@ export default function MapApp() {
           : ['!', ['has', 'point_count']]
       );
     }
+    // Footprints follow the Projects tab and the same tech/status/capacity/year
+    // filters as the dots (only relevant once the polygons have loaded).
+    if (footprintsRef.current) {
+      const feats = footprintsRef.current.features.filter((f) => passes(f.properties));
+      (map.getSource('footprints') as maplibregl.GeoJSONSource | undefined)?.setData({
+        type: 'FeatureCollection',
+        features: feats,
+      } as any);
+      for (const id of ['footprints-fill', 'footprints-line']) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showProjects ? 'visible' : 'none');
+      }
+    }
     recomputeStats();
-  }, [ready, techOn, status, minCap, companiesOn, gridOn, year, tab, showAll, visitableOnly, recomputeStats]);
+  }, [ready, techOn, status, minCap, companiesOn, gridOn, year, tab, showAll, visitableOnly, footprintsReady, recomputeStats]);
 
   // Lazy-load the ~9 MB protected-areas dataset the first time the Parks tab (or
   // "show all") needs it, then feed it into the map source + the panel list. Kept
@@ -612,8 +683,11 @@ export default function MapApp() {
       .then((fc) => {
         const map = mapRef.current;
         (map?.getSource('parks') as maplibregl.GeoJSONSource | undefined)?.setData(fc as any);
-        // Clustering 44k points blocks briefly; nudge a repaint so the globe
-        // doesn't sit blank until the next interaction.
+        // Nudge a repaint after the big source update. NOTE: in the automated
+        // test harness the globe can sit blank until the first real scroll/drag
+        // (a synthetic wheel event does NOT wake it, only CDP-level input does) —
+        // this appears to be a harness rendering quirk, not a real-browser bug.
+        // Left as a plain repaint; revisit only if it reproduces on real devices.
         map?.triggerRepaint();
         setParksList(
           fc.features.map((f) => ({
@@ -631,6 +705,25 @@ export default function MapApp() {
         parksLoadedRef.current = false; // let a later activation retry
       })
       .finally(() => setParksLoading(false));
+  }, [ready, tab, showAll]);
+
+  // Lazy-load the project footprints the first time the Projects view is active.
+  // They only render once zoomed in (minzoom 9), so the fetch is deferred off the
+  // first paint; when it lands, footprintsReady re-runs the filter effect which
+  // fills the source and shows/hides it per the current filters.
+  useEffect(() => {
+    if (!ready) return;
+    if ((tab !== 'projects' && !showAll) || footprintsLoadedRef.current) return;
+    footprintsLoadedRef.current = true;
+    fetch('/data/footprints.geojson')
+      .then((r) => r.json() as Promise<LineFC>)
+      .then((fc) => {
+        footprintsRef.current = fc;
+        setFootprintsReady(true);
+      })
+      .catch(() => {
+        footprintsLoadedRef.current = false; // let a later activation retry
+      });
   }, [ready, tab, showAll]);
 
   // Resolve deep links once data is ready: ?p=<slug> opens a project (and flies

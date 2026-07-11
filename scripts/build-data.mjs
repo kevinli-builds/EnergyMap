@@ -8,7 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
 
 // Keep in sync with TECHS in app/components/shared.ts
-const TECHS = ['solar', 'wind', 'battery', 'geothermal', 'hydro'];
+const TECHS = ['solar', 'wind', 'battery', 'geothermal', 'hydro', 'nuclear'];
 const STATUSES = ['operating', 'construction'];
 
 const projects = read('data/projects.json');

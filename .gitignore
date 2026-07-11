@@ -13,3 +13,5 @@ next-env.d.ts
 *.xlsx
 # Internal working notes (not for publication)
 /OPUS_BRIEF.md
+
+.vercel
