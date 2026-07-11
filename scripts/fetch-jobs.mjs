@@ -1,7 +1,9 @@
 // Fetches live open-role counts for companies whose careers site runs on
-// Greenhouse or Lever (both expose free public JSON endpoints — no key, no
-// scraping). Companies opt in via an "ats" block in data/companies.json:
-//   { "ats": { "type": "greenhouse", "slug": "formenergy" } }
+// Greenhouse, Lever, or Ashby (all expose free public JSON endpoints — no key,
+// no scraping). Companies opt in via an "ats" block in data/companies.json:
+//   { "ats": { "type": "greenhouse" | "lever" | "ashby", "slug": "formenergy" } }
+// (An Ashby slug is the path at jobs.ashbyhq.com/<slug> — verify it returns
+// JSON at https://api.ashbyhq.com/posting-api/job-board/<slug>.)
 // Writes data/jobs.json; run `npm run data` afterwards to bake counts into
 // the map. Failures are per-company and non-fatal.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,6 +26,10 @@ for (const c of companies) {
       const res = await fetch(`https://api.lever.co/v0/postings/${c.ats.slug}?mode=json`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       n = (await res.json()).length;
+    } else if (c.ats.type === 'ashby') {
+      const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${c.ats.slug}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      n = (await res.json()).jobs.length;
     } else {
       continue;
     }
