@@ -38,6 +38,7 @@ type ClickHandlers = {
   selectProject: (p: Record<string, any>) => void;
   selectCompany: (coords: [number, number], p: Record<string, any>) => void;
   selectPark: (coords: [number, number], p: Record<string, any>) => void;
+  selectCoal: (coords: [number, number], p: Record<string, any>) => void;
   selectFootprint: (slug: string) => void;
 };
 
@@ -82,6 +83,32 @@ function openTransmissionPopup(map: maplibregl.Map, lngLat: maplibregl.LngLatLik
     ${p.note ? `<div class="pp-note">${esc(p.note)}</div>` : ''}
   </div>`;
   new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(lngLat).setHTML(html).addTo(map);
+}
+
+function openCoalPopup(map: maplibregl.Map, coords: [number, number], p: Record<string, any>) {
+  const statusHtml =
+    p.status === 'operating'
+      ? '<span class="badge op">Operating</span>'
+      : '<span class="badge uc">Under construction</span>';
+  // Retirement is the plant's *last* planned unit retirement — "coal-free by".
+  const retire = p.retirement
+    ? `<span class="badge op">Retiring by ${esc(p.retirement)}</span>`
+    : p.status === 'operating'
+      ? '<span class="badge uc">No retirement plan</span>'
+      : '';
+  const facts: string[] = [];
+  if (p.year) facts.push(`since ${esc(p.year)}`);
+  if (p.units > 1) facts.push(`${esc(p.units)} units`);
+  if (p.co2Mt) facts.push(`≈ ${esc(p.co2Mt)} Mt CO₂/yr`);
+  const html = `<div class="pp">
+    <div class="pp-title">${esc(p.name)}</div>
+    <div class="pp-sub">Coal power station · ${esc(p.country)}${p.owner ? ' · ' + esc(p.owner) : ''}</div>
+    <div class="pp-cap">${esc(fmtCapacity(p.capacityMW))}${facts.length ? ' · ' + facts.join(' · ') : ''}</div>
+    ${statusHtml} ${retire}
+    ${p.conversion ? `<div class="pp-note">Converting to: ${esc(p.conversion)}</div>` : ''}
+    ${p.wiki ? `<a href="${esc(p.wiki)}" target="_blank" rel="noopener noreferrer">GEM wiki ↗</a>` : ''}
+  </div>`;
+  new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(coords).setHTML(html).addTo(map);
 }
 
 function openParkPopup(map: maplibregl.Map, coords: [number, number], p: Record<string, any>) {
@@ -245,6 +272,61 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
     } as any,
   });
 
+  // Coal — the grey contrast layer (GEM Global Coal Plant Tracker). Same clustered
+  // treatment as the clean techs so like compares with like, but added before them
+  // so clean-project dots always draw on top of the fleet they're displacing.
+  // Source starts empty; filled lazily the first time the Coal chip is switched on.
+  map.addSource('coal', {
+    type: 'geojson',
+    data: EMPTY as any,
+    cluster: true,
+    clusterMaxZoom: 9,
+    clusterRadius: 42,
+  });
+  map.addLayer({
+    id: 'coal-cluster',
+    type: 'circle',
+    source: 'coal',
+    filter: ['has', 'point_count'],
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-color': COLORS.coal,
+      'circle-opacity': 0.5,
+      'circle-stroke-color': COLORS.coal,
+      'circle-stroke-width': 1.5,
+      'circle-stroke-opacity': 0.85,
+      'circle-radius': ['interpolate', ['linear'], ['get', 'point_count'], 2, 13, 30, 22, 200, 32],
+    } as any,
+  });
+  map.addLayer({
+    id: 'coal-count',
+    type: 'symbol',
+    source: 'coal',
+    filter: ['has', 'point_count'],
+    layout: {
+      'text-field': '{point_count_abbreviated}',
+      'text-size': 11,
+      'text-font': ['Montserrat Regular'],
+      visibility: 'none',
+    } as any,
+    paint: { 'text-color': '#0b0e14' } as any,
+  });
+  map.addLayer({
+    id: 'coal-pt',
+    type: 'circle',
+    source: 'coal',
+    filter: ['!', ['has', 'point_count']],
+    layout: { visibility: 'none' },
+    paint: {
+      // same sqrt(MW) sizing as project dots, so grey and clean compare honestly
+      'circle-radius': ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'capacityMW'], 50]], 3, 4, 60, 15],
+      'circle-color': ['case', ['==', ['get', 'status'], 'operating'], COLORS.coal, 'rgba(0,0,0,0)'],
+      'circle-opacity': 0.85,
+      'circle-stroke-color': COLORS.coal,
+      'circle-stroke-width': ['case', ['==', ['get', 'status'], 'operating'], 1, 2],
+    } as any,
+  });
+
   for (const tech of TECHS) {
     const color = COLORS[tech];
     map.addSource(`proj-${tech}`, {
@@ -317,6 +399,8 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
     'companies-pt',
     'parks-pt',
     'parks-cluster',
+    'coal-pt',
+    'coal-cluster',
   ];
   for (const layer of pointLayers) {
     map.on('mouseenter', layer, () => {
@@ -358,6 +442,18 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
     if (!f) return;
     handlers.current.selectPark((f.geometry as any).coordinates, f.properties as any);
   });
+  map.on('click', 'coal-cluster', async (e) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    const src = map.getSource('coal') as maplibregl.GeoJSONSource;
+    const zoom = await src.getClusterExpansionZoom((f.properties as any).cluster_id);
+    map.easeTo({ center: (f.geometry as any).coordinates, zoom: zoom + 0.5 });
+  });
+  map.on('click', 'coal-pt', (e) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    handlers.current.selectCoal((f.geometry as any).coordinates, f.properties as any);
+  });
 
   // Clicking a footprint opens the same detail panel as its dot (by slug).
   map.on('mouseenter', 'footprints-fill', () => {
@@ -378,6 +474,8 @@ export default function MapApp() {
   const dataRef = useRef<{ projects: FC; companies: FC; transmission: LineFC } | null>(null);
   const footprintsRef = useRef<LineFC | null>(null);
   const footprintsLoadedRef = useRef(false);
+  const coalRef = useRef<FC | null>(null);
+  const coalLoadedRef = useRef(false);
   const filteredRef = useRef<Record<Tech, PointFeature[]>>(
     Object.fromEntries(TECHS.map((t) => [t, [] as PointFeature[]])) as Record<Tech, PointFeature[]>
   );
@@ -385,6 +483,7 @@ export default function MapApp() {
     selectProject: () => {},
     selectCompany: () => {},
     selectPark: () => {},
+    selectCoal: () => {},
     selectFootprint: () => {},
   });
 
@@ -399,6 +498,8 @@ export default function MapApp() {
   const [minCap, setMinCap] = useState(0);
   const [companiesOn, setCompaniesOn] = useState(true);
   const [gridOn, setGridOn] = useState(true);
+  const [coalOn, setCoalOn] = useState(false);
+  const [coalReady, setCoalReady] = useState(false);
   const [year, setYear] = useState(YEAR_MAX);
   const [playing, setPlaying] = useState(false);
   const [featuredOpen, setFeaturedOpen] = useState(false);
@@ -508,6 +609,11 @@ export default function MapApp() {
     if (map) openParkPopup(map, coords, p);
   }, []);
 
+  const selectCoal = useCallback((coords: [number, number], p: Record<string, any>) => {
+    const map = mapRef.current;
+    if (map) openCoalPopup(map, coords, p);
+  }, []);
+
   const closeDetail = useCallback(() => {
     setSelected(null);
     setParams({ p: null });
@@ -533,7 +639,7 @@ export default function MapApp() {
   }, []);
 
   // Keep the map's click handlers pointing at the latest callbacks.
-  handlersRef.current = { selectProject, selectCompany, selectPark, selectFootprint };
+  handlersRef.current = { selectProject, selectCompany, selectPark, selectCoal, selectFootprint };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -548,7 +654,7 @@ export default function MapApp() {
       attributionControl: {
         compact: true,
         customAttribution:
-          'Projects: <a href="https://globalenergymonitor.org/" target="_blank" rel="noopener">Global Energy Monitor</a> (CC BY 4.0) + curated set · Footprints & parks: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a> contributors (ODbL)',
+          'Projects & coal: <a href="https://globalenergymonitor.org/" target="_blank" rel="noopener">Global Energy Monitor</a> (CC BY 4.0) + curated set · Footprints & parks: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a> contributors (ODbL)',
       },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
@@ -616,12 +722,14 @@ export default function MapApp() {
     // The active tab decides which half of the globe is shown; "show all" un-gates both.
     const showProjects = tab === 'projects' || showAll;
     const showJobs = tab === 'jobs' || showAll;
-    // Same predicate for a project's dot and its footprint, so they stay in sync.
-    const passes = (props: Record<string, any>) =>
-      techOn[props.tech as Tech] &&
+    // Status/capacity/year predicate shared by clean projects AND the coal layer,
+    // so the timeline and filters tell one consistent story across both fleets.
+    const passesBase = (props: Record<string, any>) =>
       (status === 'all' || props.status === status) &&
       (props.capacityMW ?? 0) >= minCap &&
       (!yearActive || props.year == null || props.year <= year);
+    // Same predicate for a project's dot and its footprint, so they stay in sync.
+    const passes = (props: Record<string, any>) => techOn[props.tech as Tech] && passesBase(props);
     for (const tech of TECHS) {
       const feats = techOn[tech]
         ? data.projects.features.filter((f) => f.properties.tech === tech && passes(f.properties))
@@ -655,6 +763,18 @@ export default function MapApp() {
           : ['!', ['has', 'point_count']]
       );
     }
+    // Coal follows the Projects tab, its own chip, and the shared status/capacity/
+    // year filters — the tech chips don't apply, it IS the contrast to all of them.
+    if (coalRef.current) {
+      const feats = coalOn ? coalRef.current.features.filter((f) => passesBase(f.properties)) : [];
+      (map.getSource('coal') as maplibregl.GeoJSONSource | undefined)?.setData({
+        type: 'FeatureCollection',
+        features: feats,
+      } as any);
+      for (const id of ['coal-cluster', 'coal-count', 'coal-pt']) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showProjects && coalOn ? 'visible' : 'none');
+      }
+    }
     // Footprints follow the Projects tab and the same tech/status/capacity/year
     // filters as the dots (only relevant once the polygons have loaded).
     if (footprintsRef.current) {
@@ -668,7 +788,7 @@ export default function MapApp() {
       }
     }
     recomputeStats();
-  }, [ready, techOn, status, minCap, companiesOn, gridOn, year, tab, showAll, visitableOnly, footprintsReady, recomputeStats]);
+  }, [ready, techOn, status, minCap, companiesOn, gridOn, coalOn, coalReady, year, tab, showAll, visitableOnly, footprintsReady, recomputeStats]);
 
   // Lazy-load the ~9 MB protected-areas dataset the first time the Parks tab (or
   // "show all") needs it, then feed it into the map source + the panel list. Kept
@@ -706,6 +826,22 @@ export default function MapApp() {
       })
       .finally(() => setParksLoading(false));
   }, [ready, tab, showAll]);
+
+  // Lazy-load the coal fleet (~0.6 MB) the first time the Coal chip is switched
+  // on; most visitors never toggle it, so it stays off the initial page load.
+  useEffect(() => {
+    if (!ready || !coalOn || coalLoadedRef.current) return;
+    coalLoadedRef.current = true;
+    fetch('/data/coal.geojson')
+      .then((r) => r.json() as Promise<FC>)
+      .then((fc) => {
+        coalRef.current = fc;
+        setCoalReady(true);
+      })
+      .catch(() => {
+        coalLoadedRef.current = false; // let a later toggle retry
+      });
+  }, [ready, coalOn]);
 
   // Lazy-load the project footprints the first time the Projects view is active.
   // They only render once zoomed in (minzoom 9), so the fetch is deferred off the
@@ -850,6 +986,8 @@ export default function MapApp() {
                 onTech={(t) => setTechOn((s) => ({ ...s, [t]: !s[t] }))}
                 gridOn={gridOn}
                 onGrid={() => setGridOn((v) => !v)}
+                coalOn={coalOn}
+                onCoal={() => setCoalOn((v) => !v)}
                 status={status}
                 onStatus={setStatus}
                 minCap={minCap}

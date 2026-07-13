@@ -20,6 +20,8 @@ export default function Controls(props: {
   onTech: (t: Tech) => void;
   gridOn: boolean;
   onGrid: () => void;
+  coalOn: boolean;
+  onCoal: () => void;
   status: StatusFilter;
   onStatus: (s: StatusFilter) => void;
   minCap: number;
@@ -37,6 +39,8 @@ export default function Controls(props: {
     onTech,
     gridOn,
     onGrid,
+    coalOn,
+    onCoal,
     status,
     onStatus,
     minCap,
@@ -71,6 +75,14 @@ export default function Controls(props: {
             onClick={onGrid}
           >
             🔌 Grid
+          </button>
+          <button
+            className={`chip ${coalOn ? 'on' : ''}`}
+            style={{ '--c': COLORS.coal } as React.CSSProperties}
+            onClick={onCoal}
+            title="Contrast layer: the coal fleet all this is displacing (Global Energy Monitor)"
+          >
+            🏭 Coal
           </button>
         </div>
       </div>
@@ -139,6 +151,11 @@ export default function Controls(props: {
           <div className="legend-row">
             <span className="lline" /> Transmission &amp; interconnectors
           </div>
+          {coalOn && (
+            <div className="legend-row">
+              <span className="ldot" style={{ background: COLORS.coal }} /> Coal plants (what&rsquo;s being displaced)
+            </div>
+          )}
         </div>
       </div>
     </>

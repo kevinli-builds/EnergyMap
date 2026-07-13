@@ -4,7 +4,7 @@ export type StatusFilter = 'all' | 'operating' | 'construction';
 // Order here drives the layer/legend/chip order in the UI.
 export const TECHS: Tech[] = ['solar', 'wind', 'battery', 'geothermal', 'hydro', 'nuclear'];
 
-export const COLORS: Record<Tech | 'company' | 'park', string> = {
+export const COLORS: Record<Tech | 'company' | 'park' | 'coal', string> = {
   solar: '#fbbf24',
   wind: '#38bdf8',
   battery: '#34d399',
@@ -13,6 +13,7 @@ export const COLORS: Record<Tech | 'company' | 'park', string> = {
   nuclear: '#e879f9',
   company: '#c084fc',
   park: '#22c55e',
+  coal: '#a8a29e', // ash grey — the contrast layer, deliberately drab next to the clean techs
 };
 
 export const TECH_LABEL: Record<Tech, string> = {

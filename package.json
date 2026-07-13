@@ -11,6 +11,7 @@
     "jobs": "node scripts/fetch-jobs.mjs",
     "energy": "node scripts/build-energy.mjs",
     "parks": "node scripts/build-parks.mjs",
+    "coal": "node scripts/build-coal.mjs",
     "footprints": "node scripts/build-footprints.mjs",
     "import:gem": "node scripts/import-gem.mjs",
     "xlsx2csv": "node scripts/xlsx-to-csv.mjs",

@@ -9,6 +9,7 @@ Facts below (endpoints, licenses, release dates) were verified July 2026.
 | Layer | Source | License | Source cadence | Refresh |
 |---|---|---|---|---|
 | Projects (solar/wind/geo/hydro/…) | [Global Energy Monitor](https://globalenergymonitor.org/projects/) trackers | CC BY 4.0 | ~1–2 releases/yr per tracker | **Manual** (`npm run import:gem`) — see below |
+| Coal plants (contrast layer) | GEM REST API (`api.globalenergymonitor.org`) | CC BY 4.0 | ~2 releases/yr | **Automated** (`npm run coal`) |
 | Country energy mix | [OWID energy-data](https://github.com/owid/energy-data) (CSV on GitHub) | CC BY | ~monthly–quarterly commits | **Automated** (`npm run energy`) |
 | Parks & protected areas | OpenStreetMap via Overpass API | ODbL | continuous | **Automated** (`npm run parks`) |
 | Open-role counts | Greenhouse / Lever public JSON | free public endpoints | live | **Automated** (nightly GitHub Action) |
@@ -51,7 +52,8 @@ July 2026:
 - **Read endpoints need no auth** — `GET /assets`, `GET /catalog/metadata`,
   `GET /catalog/asset-classes`, ownership tracing, etc. (self-documented at `/openapi.json`).
 - **But coverage is coal + ownership only** (~57k assets: coal plants/mines). No solar or
-  wind asset classes yet.
+  wind asset classes yet. (The coal-plant coverage is what powers the coal contrast
+  layer below — the one GEM dataset already fully automated here.)
 - The bulk `POST /download` endpoint exists but requires a JWT token issued via their web
   form — not usable headlessly.
 
@@ -72,6 +74,28 @@ Useful if you ever want turbine/site-level detail for the US beyond GEM's projec
 
 - **WRI Global Power Plant Database** — the classic free alternative, but frozen since 2021.
   GEM has superseded it.
+
+---
+
+## Coal plants (contrast layer) — GEM REST API — **implemented**
+
+The one GEM tracker that needs no form-gated download: the Global Coal Plant Tracker is
+served in full by their public API. Built by `npm run coal` (`scripts/build-coal.mjs`) →
+`public/data/coal.geojson`, drawn as the grey "🏭 Coal" chip on the Projects tab — the
+fleet the clean build-out is displacing. Lazy-loaded (~0.6 MB) only when toggled on.
+
+- Endpoint: `GET /assets?asset_type=coal-plant&include_type_fields=true` — keyless,
+  paginated at **500 rows max** per request (~15 requests for the full fleet).
+- **Gotcha:** `construction` is a *sub*-status in GEM's taxonomy (group `planned`), so
+  filter with `operating_sub_status=operating&operating_sub_status=construction` —
+  `operating_status=construction` silently matches nothing.
+- Rows are **units**; the script aggregates to plants by `location_id` (summed MW and
+  CO₂/yr, earliest start year, latest planned retirement, conversion-to-fuel notes,
+  GEM wiki link) and keeps plants ≥ 200 MW (`--min` to change) — same floor as solar,
+  so grey vs clean is an apples-to-apples comparison.
+- Release + citation are read from `/catalog/metadata` and embedded in the geojson's
+  `meta` block (as of first build: January 2026 release, CC BY 4.0 — attributed on-map).
+- Refresh: `npm run coal`. Safe to automate — fold into the monthly workflow below.
 
 ---
 
@@ -181,25 +205,96 @@ Wind farms are scattered turbines, so a farm-boundary polygon is often misleadin
 reservoirs and solar/geothermal plants polygon well. Keep footprints in a separate
 prebuilt `footprints.geojson` (simplified geometry), shown only at high zoom.
 
-## Possible new layers (all free, automatable)
+## Roadmap: possible new layers & features
 
-- **Nuclear / bioenergy / more hydro projects** — the GEM tracker `.xlsx` files are already
-  sitting in `GEM data/` (Nuclear Sep 2025, Bioenergy V3, Hydro Mar 2026); `import-gem.mjs`
-  just needs a `--tech` mapping for them.
-- **Facility-level emissions** — [Climate TRACE](https://climatetrace.org/data) (CC BY 4.0,
-  bulk country/sector downloads, updated ~annually with monthly estimates for power).
-  Would make a striking "dirty vs clean" contrast layer.
-- **Live grid carbon intensity** — [Electricity Maps](https://portal.electricitymaps.com/)
-  has a free tier (personal/non-commercial, API key, one zone per key) — fine for a demo
-  widget, not for a full layer. Ember monthly data is the free-and-open alternative at
-  monthly rather than live resolution.
+Two lists, researched/brainstormed July 2026. **New data layers** adds to what's on the
+map; **product ideas** changes what the site *is* — from a map you visit once into a
+living reference. The unifying idea behind the layers: the map already shows the clean
+build-out well — what's missing is *what it's replacing*, *what's coming next*, and
+*why it's where it is*.
+
+### New data layers (prioritized by impact-per-effort)
+
+1. **Coal contrast layer** — ✅ **done** (see section above). Optional deepening:
+   [Climate TRACE](https://climatetrace.org/data) facility-level emissions (CC BY 4.0,
+   bulk downloads, ~annual updates with monthly power-sector estimates) to weight the
+   "dirty vs clean" contrast by actual CO₂ rather than capacity.
+2. **The pipeline: announced / pre-construction projects** — the GEM tracker `.xlsx`
+   files already in `GEM data/` contain announced/pre-permit/permitted phases that
+   `import-gem.mjs` currently filters out. One status mapping + a filter pill turns the
+   map from "what exists" into "what's coming".
+3. **Resource potential overlays (the "why here" layer)** —
+   [Global Solar Atlas](https://globalsolaratlas.info/) and
+   [Global Wind Atlas](https://globalwindatlas.info/) (both World Bank–funded, CC BY 4.0)
+   publish GHI / wind-speed rasters. As a toggleable heatmap under the dots, they explain
+   why the Atacama and the North Sea are covered in projects — and where the
+   empty-but-sunny gaps are.
+4. **Country panel trends, not snapshots** — `build-energy.mjs` already downloads the
+   full OWID CSV but keeps only the latest year. A clean-vs-fossil sparkline since ~2000
+   plus per-capita figures costs nothing new in sourcing.
+5. **Green hydrogen / electrolyzers** — the IEA Hydrogen Production Projects Database is
+   a free downloadable spreadsheet, updated ~annually (verify current license terms —
+   most IEA free data is now CC BY 4.0). A new tech pillar like battery/geothermal.
+6. **Battery gigafactories / clean manufacturing** — no good free global dataset exists;
+   hand-curate a ~30-site flagship list (the original battery-layer approach).
+7. **Nuclear / bioenergy / more hydro projects** — the GEM tracker `.xlsx` files are
+   already sitting in `GEM data/` (Nuclear Sep 2025, Bioenergy V3, Hydro Mar 2026);
+   `import-gem.mjs` just needs a `--tech` mapping for them.
+
+### Product ideas — beyond data layers
+
+None of these need new data sources; all the ingredients are already in the repo or one
+import flag away. The first two are the category-changers; 3–5 are shareability
+multipliers; 6 compounds slowly.
+
+1. **The diff is the product — auto-generated changelog.** Every data refresh already
+   produces an implicit diff: plants newly online, retirements announced, countries
+   crossing clean-energy thresholds. Compute it in the refresh workflows by comparing
+   the new geojson against the previous commit's version (`git show
+   HEAD:public/data/coal.geojson` gives the baseline for free), append to
+   `data/changelog.json`, and render a "What changed" page + RSS feed in the static
+   export. Reference sites win on recurrence — a monthly "State of the build-out" gives
+   search engines fresh content and humans a reason to come back.
+2. **Timeline that runs forward (to ~2035).** The year slider stops at now+3, but three
+   datasets extend it into the future: announced/pre-permit/permitted phases in the GEM
+   `.xlsx` files (currently filtered out — layer idea #2 above), the `retirement` years
+   now on coal plants, and `conversion` notes. Past = solid dots, future = translucent;
+   coal fades out at its retirement year while the pipeline fades in. Press play and the
+   transition plays out. No other free map does this.
+3. **"Replace this plant" calculator.** On every coal-plant popup: replacing this plant's
+   generation (capacityMW × capacity factor × 8760 — GEM's API ships per-unit
+   `capacity_factor`; add it to `build-coal.mjs` output) needs ~X km² of solar or N
+   modern turbines, drawn as a real circle on the map centered on the plant. Visceral,
+   screenshot-friendly; deep-linkable (`?p=<coal-slug>&replace=solar`).
+4. **Displacement scores.** For each coal plant, precompute at build time how much clean
+   capacity sits within 100 km and how that's grown since 2015 (a haversine pass over
+   1,889 × 2,712 points is fine in a build script). Popup: "3.4 GW of clean capacity
+   within 100 km (0.4 GW in 2015)" — and a ranked "most surrounded" list journalists
+   will lift.
+5. **Leaderboards.** Per-capita clean watts (OWID has population), fastest builders
+   (GW/yr from commissioning years), coal exits (% of fleet with a retirement plan).
+   Rankings get shared far more than maps; deep-link each one.
+6. **Publish the dataset.** The merged, cleaned geojson is itself a product (all sources
+   CC BY / ODbL — redistribution fine with attribution, already shown). Version it per
+   GEM refresh, document the schema, add a download page with a citation snippet.
+   Being upstream for other projects is where durable backlinks come from.
+
+### Deliberately skipped (and why)
+
+- **Live grid carbon intensity** — [Electricity Maps](https://portal.electricitymaps.com/)'s
+  free tier (personal/non-commercial, API key, one zone per key) can't cover a full layer;
+  fine for a demo widget only. [Ember monthly data](https://ember-energy.org/data/) is the
+  free-and-open alternative at monthly rather than live resolution.
+- **EV charging** — Open Charge Map is free, but it's a different site's job.
+- **WDPA / Protected Planet** for parks — licensing (see §3); OSM stays.
 
 ---
 
 ## Automation playbook
 
 Already automated: **jobs** (daily workflow). Worth adding one monthly workflow for
-**energy mix + parks** — same commit-if-changed pattern as `refresh-jobs.yml`:
+**energy mix + parks + coal** — same commit-if-changed pattern as `refresh-jobs.yml`
+(add `- run: node scripts/build-coal.mjs` before the build step below):
 
 ```yaml
 name: Refresh energy mix + parks
