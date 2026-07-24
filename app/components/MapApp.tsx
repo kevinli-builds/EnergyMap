@@ -11,6 +11,7 @@ import Intro from './Intro';
 import CountryPanel from './CountryPanel';
 import featured from '../../data/featured.json';
 import { COLORS, esc, fmtCapacity, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
+import { isSunlit, nightPolygon, subsolarPoint } from '../lib/solar';
 
 type PointFeature = {
   type: 'Feature';
@@ -44,6 +45,13 @@ type ClickHandlers = {
 
 const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const EMPTY: FC = { type: 'FeatureCollection', features: [] };
+
+// Day/night "live" layer (§4 D1). The solar-glow halo breathes between these two
+// radius/opacity keyframes on a slow paint transition — sunlit solar farms feel
+// like they're generating right now. Radius scales with capacity like the dots.
+const GLOW_SMALL = ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'capacityMW'], 50]], 3, 7, 60, 20] as any;
+const GLOW_BIG = ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'capacityMW'], 50]], 3, 12, 60, 32] as any;
+const PULSE_MS = 1800;
 
 // Reflect the open panel in the URL (?p=<slug> for a project, ?c=<country> for the
 // energy-mix panel) without touching the map position hash. null clears a param.
@@ -139,7 +147,19 @@ function openParkPopup(map: maplibregl.Map, coords: [number, number], p: Record<
 const techColorMatch = ['match', ['get', 'tech'], ...TECHS.flatMap((t) => [t, COLORS[t]]), '#888'] as any;
 
 function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, handlers: React.MutableRefObject<ClickHandlers>) {
-  // Transmission lines first, so project dots draw on top of them.
+  // Day/night shade (§4 D1) — a translucent polygon over the night hemisphere,
+  // added first so every data layer draws on top of it. Hidden until the 🌞 Live
+  // toggle is switched on; the source is refreshed each minute from the clock.
+  map.addSource('night', { type: 'geojson', data: EMPTY as any });
+  map.addLayer({
+    id: 'night-fill',
+    type: 'fill',
+    source: 'night',
+    layout: { visibility: 'none' },
+    paint: { 'fill-color': '#04060d', 'fill-opacity': 0.34 },
+  });
+
+  // Transmission lines next, so project dots draw on top of them.
   map.addSource('transmission', { type: 'geojson', data: transmission as any });
   const lineWidth = ['interpolate', ['linear'], ['zoom'], 2, 1.6, 6, 3.6] as any;
   // Soft glow so the thin lines read on the dark globe at any zoom.
@@ -327,6 +347,26 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
     } as any,
   });
 
+  // "Generating now" glow (§4 D1): a soft, breathing halo behind each solar
+  // project that's currently in daylight. The source holds only the sunlit subset
+  // (recomputed each minute); the pulse is driven by paint transitions. Added
+  // before the tech dots so the crisp dot always sits on top of its glow.
+  map.addSource('solar-glow', { type: 'geojson', data: EMPTY as any });
+  map.addLayer({
+    id: 'solar-glow',
+    type: 'circle',
+    source: 'solar-glow',
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-color': COLORS.solar,
+      'circle-blur': 1,
+      'circle-radius': GLOW_SMALL,
+      'circle-opacity': 0.42,
+      'circle-radius-transition': { duration: PULSE_MS, delay: 0 },
+      'circle-opacity-transition': { duration: PULSE_MS, delay: 0 },
+    } as any,
+  });
+
   for (const tech of TECHS) {
     const color = COLORS[tech];
     map.addSource(`proj-${tech}`, {
@@ -498,6 +538,7 @@ export default function MapApp() {
   const [minCap, setMinCap] = useState(0);
   const [companiesOn, setCompaniesOn] = useState(true);
   const [gridOn, setGridOn] = useState(true);
+  const [liveOn, setLiveOn] = useState(false);
   const [coalOn, setCoalOn] = useState(false);
   const [coalReady, setCoalReady] = useState(false);
   const [year, setYear] = useState(YEAR_MAX);
@@ -553,6 +594,23 @@ export default function MapApp() {
       .sort((a, b) => b.gw - a.gw)
       .slice(0, 8);
     setStats({ count, gw: mw / 1000, byTech, byCountry });
+  }, []);
+
+  // Recompute the day/night shade + the sunlit-solar subset from the current
+  // clock. Reads filteredRef so the glow honours the active tech/status/year
+  // filters. Called on toggle, every minute, and whenever the filters change.
+  const refreshLive = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !map.getSource('night')) return;
+    const sub = subsolarPoint(new Date());
+    (map.getSource('night') as maplibregl.GeoJSONSource).setData(nightPolygon(sub) as any);
+    const lit = filteredRef.current.solar.filter((f) =>
+      isSunlit(f.geometry.coordinates[0], f.geometry.coordinates[1], sub)
+    );
+    (map.getSource('solar-glow') as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: 'FeatureCollection',
+      features: lit,
+    } as any);
   }, []);
 
   const selectProject = useCallback((p: Record<string, any>) => {
@@ -748,6 +806,15 @@ export default function MapApp() {
     if (map.getLayer('companies-pt')) {
       map.setLayoutProperty('companies-pt', 'visibility', showJobs && companiesOn ? 'visible' : 'none');
     }
+    // Day/night: the shade is global ambiance (any tab); the solar glow only
+    // makes sense over visible solar dots. refreshLive fills both sources.
+    if (map.getLayer('night-fill')) {
+      map.setLayoutProperty('night-fill', 'visibility', liveOn ? 'visible' : 'none');
+    }
+    if (map.getLayer('solar-glow')) {
+      map.setLayoutProperty('solar-glow', 'visibility', liveOn && showProjects && techOn.solar ? 'visible' : 'none');
+    }
+    if (liveOn) refreshLive();
     for (const id of ['transmission-glow', 'transmission-op', 'transmission-uc', 'transmission-hit']) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showProjects && gridOn ? 'visible' : 'none');
     }
@@ -788,7 +855,7 @@ export default function MapApp() {
       }
     }
     recomputeStats();
-  }, [ready, techOn, status, minCap, companiesOn, gridOn, coalOn, coalReady, year, tab, showAll, visitableOnly, footprintsReady, recomputeStats]);
+  }, [ready, techOn, status, minCap, companiesOn, gridOn, liveOn, coalOn, coalReady, year, tab, showAll, visitableOnly, footprintsReady, refreshLive, recomputeStats]);
 
   // Lazy-load the ~9 MB protected-areas dataset the first time the Parks tab (or
   // "show all") needs it, then feed it into the map source + the panel list. Kept
@@ -879,6 +946,26 @@ export default function MapApp() {
     const c = params.get('c');
     if (c) setCountryName(COUNTRY_ALIAS[c] ?? c);
   }, [ready]);
+
+  // Live day/night: while on, refresh the terminator + sunlit set each minute and
+  // breathe the solar glow between its two keyframes on the paint transition.
+  useEffect(() => {
+    if (!ready || !liveOn) return;
+    refreshLive();
+    const clock = setInterval(refreshLive, 60_000);
+    let big = false;
+    const pulse = setInterval(() => {
+      const map = mapRef.current;
+      if (!map || !map.getLayer('solar-glow')) return;
+      big = !big;
+      map.setPaintProperty('solar-glow', 'circle-radius', big ? GLOW_BIG : GLOW_SMALL);
+      map.setPaintProperty('solar-glow', 'circle-opacity', big ? 0.16 : 0.42);
+    }, PULSE_MS);
+    return () => {
+      clearInterval(clock);
+      clearInterval(pulse);
+    };
+  }, [ready, liveOn, refreshLive]);
 
   // Featured "tour": auto-fly between highlights every 8s, blurb overlaid.
   useEffect(() => {
@@ -988,6 +1075,8 @@ export default function MapApp() {
                 onGrid={() => setGridOn((v) => !v)}
                 coalOn={coalOn}
                 onCoal={() => setCoalOn((v) => !v)}
+                liveOn={liveOn}
+                onLive={() => setLiveOn((v) => !v)}
                 status={status}
                 onStatus={setStatus}
                 minCap={minCap}

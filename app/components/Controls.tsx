@@ -22,6 +22,8 @@ export default function Controls(props: {
   onGrid: () => void;
   coalOn: boolean;
   onCoal: () => void;
+  liveOn: boolean;
+  onLive: () => void;
   status: StatusFilter;
   onStatus: (s: StatusFilter) => void;
   minCap: number;
@@ -41,6 +43,8 @@ export default function Controls(props: {
     onGrid,
     coalOn,
     onCoal,
+    liveOn,
+    onLive,
     status,
     onStatus,
     minCap,
@@ -83,6 +87,14 @@ export default function Controls(props: {
             title="Contrast layer: the coal fleet all this is displacing (Global Energy Monitor)"
           >
             🏭 Coal
+          </button>
+          <button
+            className={`chip ${liveOn ? 'on' : ''}`}
+            style={{ '--c': COLORS.solar } as React.CSSProperties}
+            onClick={onLive}
+            title="Shade the night side of the Earth and glow the solar farms generating in daylight right now"
+          >
+            🌞 Live
           </button>
         </div>
       </div>
@@ -154,6 +166,11 @@ export default function Controls(props: {
           {coalOn && (
             <div className="legend-row">
               <span className="ldot" style={{ background: COLORS.coal }} /> Coal plants (what&rsquo;s being displaced)
+            </div>
+          )}
+          {liveOn && (
+            <div className="legend-row">
+              <span className="ldot glow" style={{ background: COLORS.solar }} /> 🌞 Solar generating in daylight now
             </div>
           )}
         </div>

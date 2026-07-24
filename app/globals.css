@@ -204,6 +204,8 @@ select.mincap option {
 .ldot.sz-s { width: 6px; height: 6px; }
 .ldot.sz-l { width: 12px; height: 12px; }
 .lline { display: inline-block; width: 18px; height: 0; border-top: 2px solid #fb923c; flex: none; }
+/* glowing solar-farm swatch — mirrors the map's "generating now" halo */
+.ldot.glow { box-shadow: 0 0 5px 1px var(--solar); }
 
 /* ---------- bottom stats + panel ---------- */
 .stats-wrap {
