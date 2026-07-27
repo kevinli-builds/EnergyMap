@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import energyMix from '../../data/energy-mix.json';
+import buildout from '../../data/country-buildout.json';
 
 type Mix = {
   iso: string;
@@ -13,7 +14,19 @@ type Mix = {
   demand: number | null;
   generation: number | null;
 };
+type Buildout = {
+  name: string;
+  opGW: number;
+  ucGW: number;
+  totalGW: number;
+  gwPerM: number | null;
+  pipeline: number | null;
+  cagr: number | null;
+  firstYear: number | null;
+  byYear: Record<string, number>;
+};
 const MIX: Record<string, Mix> = energyMix as any;
+const BUILDOUT: Record<string, Buildout> = buildout as any;
 const COUNTRIES = Object.keys(MIX).sort();
 
 const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`);
@@ -30,6 +43,7 @@ export default function CountryPanel(props: {
 }) {
   const { country, onCountry, onClose } = props;
   const m = MIX[country];
+  const b = m?.iso ? BUILDOUT[m.iso] : undefined;
   const slug = slugify(country);
   const clean = m?.lowCarbon ?? 0;
   const fossil = m?.fossil ?? Math.max(0, 100 - clean);
@@ -113,6 +127,8 @@ export default function CountryPanel(props: {
               </div>
             )}
 
+            {b && b.totalGW > 0 && <BuildoutSection b={b} />}
+
             <dl className="d-rows">
               <div className="d-row">
                 <dt>Renewables</dt>
@@ -151,6 +167,51 @@ export default function CountryPanel(props: {
 
         <p className="intro-foot">Share of electricity generation · Our World in Data / Ember (CC BY)</p>
       </div>
+    </div>
+  );
+}
+
+// §9 L2 growth engine: the tracked clean-energy build-out for this country —
+// operating vs building totals, a CAGR chip, and a GW-added-per-year mini chart.
+function BuildoutSection({ b }: { b: Buildout }) {
+  const years = Object.keys(b.byYear)
+    .map(Number)
+    .sort((a, y) => a - y);
+  const recent = years.slice(-16);
+  const max = Math.max(0.0001, ...recent.map((y) => b.byYear[y]));
+  return (
+    <div className="cp-build">
+      <div className="sp-title">Tracked clean-energy build-out</div>
+      <div className="cp-build-head">
+        <span className="cp-build-total">{b.totalGW.toLocaleString()} GW</span>
+        <span className="cp-build-split">
+          {b.opGW.toLocaleString()} operating · {b.ucGW.toLocaleString()} building
+        </span>
+        {b.cagr != null && b.firstYear != null && (
+          <span className="cp-cagr" title="Compound annual growth of cumulative operating capacity">
+            ▲ +{b.cagr}%/yr since {b.firstYear}
+          </span>
+        )}
+      </div>
+      {recent.length > 1 && (
+        <>
+          <div className="cp-bars" role="img" aria-label="Gigawatts added per year">
+            {recent.map((y) => (
+              <span
+                key={y}
+                className="cp-bar-col"
+                style={{ height: `${Math.max(3, (b.byYear[y] / max) * 100)}%` }}
+                title={`${y}: ${b.byYear[y].toLocaleString()} GW added`}
+              />
+            ))}
+          </div>
+          <div className="cp-bars-axis">
+            <span>{recent[0]}</span>
+            <span>GW commissioned per year</span>
+            <span>{recent[recent.length - 1]}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }

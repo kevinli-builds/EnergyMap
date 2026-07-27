@@ -1,6 +1,6 @@
 'use client';
 
-import { COLORS, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
+import { COLORS, Metric, METRICS, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
 
 const CAP_OPTIONS = [
   { v: 0, label: 'Any size' },
@@ -24,6 +24,8 @@ export default function Controls(props: {
   onCoal: () => void;
   liveOn: boolean;
   onLive: () => void;
+  metric: Metric;
+  onMetric: (m: Metric) => void;
   status: StatusFilter;
   onStatus: (s: StatusFilter) => void;
   minCap: number;
@@ -45,6 +47,8 @@ export default function Controls(props: {
     onCoal,
     liveOn,
     onLive,
+    metric,
+    onMetric,
     status,
     onStatus,
     minCap,
@@ -97,6 +101,36 @@ export default function Controls(props: {
             🌞 Live
           </button>
         </div>
+      </div>
+
+      <div className="section">
+        <div className="section-label">Colour countries by</div>
+        <div className="seg seg-wrap">
+          <button className={metric === 'off' ? 'on' : ''} onClick={() => onMetric('off')}>
+            Off
+          </button>
+          {METRICS.map((m) => (
+            <button key={m.id} className={metric === m.id ? 'on' : ''} onClick={() => onMetric(m.id)} title={m.unit}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {metric !== 'off' &&
+          (() => {
+            const m = METRICS.find((x) => x.id === metric)!;
+            const grad = `linear-gradient(90deg, ${m.ramp.map(([, c]) => c).join(', ')})`;
+            return (
+              <div className="choro-legend">
+                <div className="choro-grad" style={{ background: grad }} />
+                <div className="choro-scale">
+                  <span>{m.ramp[0][0]}</span>
+                  <span className="choro-unit">{m.unit}</span>
+                  <span>{m.ramp[m.ramp.length - 1][0]}+</span>
+                </div>
+                <div className="choro-hint">Tap a country for its energy mix →</div>
+              </div>
+            );
+          })()}
       </div>
 
       <div className="section">

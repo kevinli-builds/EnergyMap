@@ -123,6 +123,29 @@ html, body {
 .chip.on { background: var(--c); color: #0b0e14; font-weight: 600; }
 
 .seg { display: flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+/* wrapping variant for the 4-way country-metric picker */
+.seg.seg-wrap { flex-wrap: wrap; border: 0; gap: 4px; }
+.seg.seg-wrap button {
+  flex: 1 1 40%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.seg.seg-wrap button.on { border-color: var(--battery); }
+
+/* country-choropleth legend */
+.choro-legend { margin-top: 8px; }
+.choro-grad { height: 9px; border-radius: 999px; border: 1px solid var(--border); }
+.choro-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.choro-unit { text-align: center; flex: 1; }
+.choro-hint { margin-top: 6px; font-size: 10.5px; color: var(--muted); opacity: 0.85; }
 .seg button {
   flex: 1;
   font-size: 11.5px;
@@ -470,6 +493,45 @@ select.mincap option {
 .cp-dot.clean { background: var(--battery); }
 .cp-dot.fossil { background: #6b7280; }
 .cp-total { margin-top: 12px; font-size: 12.5px; color: #c3cad6; line-height: 1.5; }
+
+/* country build-out (§9 L2) */
+.cp-build { margin-top: 16px; }
+.cp-build-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin: 2px 0 10px; }
+.cp-build-total { font-size: 20px; font-weight: 800; color: var(--battery); line-height: 1; }
+.cp-build-split { font-size: 11.5px; color: var(--muted); }
+.cp-cagr {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #4ade80;
+  background: rgba(52, 211, 153, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.cp-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 54px;
+  padding: 2px 0;
+}
+.cp-bar-col {
+  flex: 1;
+  min-width: 0;
+  background: linear-gradient(180deg, var(--battery), rgba(52, 211, 153, 0.35));
+  border-radius: 2px 2px 0 0;
+}
+.cp-bars-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cp-bars-axis span:nth-child(2) { flex: 1; text-align: center; }
 .cp-total b { color: var(--text); font-weight: 700; }
 .cp-total-green { color: var(--battery); font-weight: 600; }
 .cp-reports { margin-top: 16px; }

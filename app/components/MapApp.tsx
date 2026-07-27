@@ -10,8 +10,16 @@ import ParksPanel, { ParkProps } from './ParksPanel';
 import Intro from './Intro';
 import CountryPanel from './CountryPanel';
 import featured from '../../data/featured.json';
-import { COLORS, esc, fmtCapacity, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
+import energyMix from '../../data/energy-mix.json';
+import { choroplethColor, COLORS, esc, fmtCapacity, Metric, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
 import { isSunlit, nightPolygon, subsolarPoint } from '../lib/solar';
+
+// ISO-A3 → OWID country name, so a click on a choropleth country (which carries
+// only its ISO) can open the energy-mix panel (keyed by name).
+const ISO_TO_NAME: Record<string, string> = {};
+for (const [name, m] of Object.entries(energyMix as Record<string, { iso?: string }>)) {
+  if (m.iso) ISO_TO_NAME[m.iso] = name;
+}
 
 type PointFeature = {
   type: 'Feature';
@@ -41,6 +49,7 @@ type ClickHandlers = {
   selectPark: (coords: [number, number], p: Record<string, any>) => void;
   selectCoal: (coords: [number, number], p: Record<string, any>) => void;
   selectFootprint: (slug: string) => void;
+  selectBoundary: (iso: string) => void;
 };
 
 const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
@@ -52,6 +61,7 @@ const EMPTY: FC = { type: 'FeatureCollection', features: [] };
 const GLOW_SMALL = ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'capacityMW'], 50]], 3, 7, 60, 20] as any;
 const GLOW_BIG = ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'capacityMW'], 50]], 3, 12, 60, 32] as any;
 const PULSE_MS = 1800;
+const NODATA_FILL = 'rgba(125,135,150,0.06)';
 
 // Reflect the open panel in the URL (?p=<slug> for a project, ?c=<country> for the
 // energy-mix panel) without touching the map position hash. null clears a param.
@@ -157,6 +167,35 @@ function addLayers(map: maplibregl.Map, companies: FC, transmission: LineFC, han
     source: 'night',
     layout: { visibility: 'none' },
     paint: { 'fill-color': '#04060d', 'fill-opacity': 0.34 },
+  });
+
+  // Country choropleth (§9 L1) — recolours whole countries by a chosen metric.
+  // Added just above the night shade so transmission lines and every dot draw on
+  // top. Source is empty + hidden until a metric is picked (lazy-loaded then).
+  map.addSource('boundaries', { type: 'geojson', data: EMPTY as any });
+  map.addLayer({
+    id: 'choropleth-fill',
+    type: 'fill',
+    source: 'boundaries',
+    layout: { visibility: 'none' },
+    paint: { 'fill-color': NODATA_FILL, 'fill-opacity': 0.6, 'fill-antialias': true },
+  });
+  map.addLayer({
+    id: 'choropleth-line',
+    type: 'line',
+    source: 'boundaries',
+    layout: { visibility: 'none' },
+    paint: { 'line-color': 'rgba(255,255,255,0.18)', 'line-width': 0.5 },
+  });
+  map.on('mouseenter', 'choropleth-fill', () => {
+    map.getCanvas().style.cursor = 'pointer';
+  });
+  map.on('mouseleave', 'choropleth-fill', () => {
+    map.getCanvas().style.cursor = '';
+  });
+  map.on('click', 'choropleth-fill', (e) => {
+    const f = e.features?.[0];
+    if (f) handlers.current.selectBoundary((f.properties as any).iso);
   });
 
   // Transmission lines next, so project dots draw on top of them.
@@ -525,6 +564,7 @@ export default function MapApp() {
     selectPark: () => {},
     selectCoal: () => {},
     selectFootprint: () => {},
+    selectBoundary: () => {},
   });
 
   const [ready, setReady] = useState(false);
@@ -539,6 +579,9 @@ export default function MapApp() {
   const [companiesOn, setCompaniesOn] = useState(true);
   const [gridOn, setGridOn] = useState(true);
   const [liveOn, setLiveOn] = useState(false);
+  const [metric, setMetric] = useState<Metric>('off');
+  const boundariesLoadedRef = useRef(false);
+  const [boundariesReady, setBoundariesReady] = useState(false);
   const [coalOn, setCoalOn] = useState(false);
   const [coalReady, setCoalReady] = useState(false);
   const [year, setYear] = useState(YEAR_MAX);
@@ -641,6 +684,17 @@ export default function MapApp() {
     setParams({ c: owid, p: null });
   }, []);
 
+  // Clicking a choropleth country → open its energy-mix panel (ISO → OWID name).
+  const selectBoundary = useCallback((iso: string) => {
+    const name = ISO_TO_NAME[iso];
+    if (!name) return;
+    setTourOn(false);
+    setSelected(null);
+    setFeaturedOpen(false);
+    setCountryName(name);
+    setParams({ c: name, p: null });
+  }, []);
+
   // Switch the country shown in the already-open panel (keeps ?c= in sync).
   const changeCountry = useCallback((owidName: string) => {
     setCountryName(owidName);
@@ -697,7 +751,7 @@ export default function MapApp() {
   }, []);
 
   // Keep the map's click handlers pointing at the latest callbacks.
-  handlersRef.current = { selectProject, selectCompany, selectPark, selectCoal, selectFootprint };
+  handlersRef.current = { selectProject, selectCompany, selectPark, selectCoal, selectFootprint, selectBoundary };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -815,6 +869,14 @@ export default function MapApp() {
       map.setLayoutProperty('solar-glow', 'visibility', liveOn && showProjects && techOn.solar ? 'visible' : 'none');
     }
     if (liveOn) refreshLive();
+    // Country choropleth: shown on the Projects view when a metric is picked.
+    const showChoro = metric !== 'off' && showProjects;
+    for (const id of ['choropleth-fill', 'choropleth-line']) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showChoro ? 'visible' : 'none');
+    }
+    if (metric !== 'off' && map.getLayer('choropleth-fill')) {
+      map.setPaintProperty('choropleth-fill', 'fill-color', choroplethColor(metric));
+    }
     for (const id of ['transmission-glow', 'transmission-op', 'transmission-uc', 'transmission-hit']) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showProjects && gridOn ? 'visible' : 'none');
     }
@@ -855,7 +917,7 @@ export default function MapApp() {
       }
     }
     recomputeStats();
-  }, [ready, techOn, status, minCap, companiesOn, gridOn, liveOn, coalOn, coalReady, year, tab, showAll, visitableOnly, footprintsReady, refreshLive, recomputeStats]);
+  }, [ready, techOn, status, minCap, companiesOn, gridOn, liveOn, metric, boundariesReady, coalOn, coalReady, year, tab, showAll, visitableOnly, footprintsReady, refreshLive, recomputeStats]);
 
   // Lazy-load the ~9 MB protected-areas dataset the first time the Parks tab (or
   // "show all") needs it, then feed it into the map source + the panel list. Kept
@@ -909,6 +971,22 @@ export default function MapApp() {
         coalLoadedRef.current = false; // let a later toggle retry
       });
   }, [ready, coalOn]);
+
+  // Lazy-load the country-boundaries choropleth (~180 KB) the first time a metric
+  // is picked; most visitors never open it, so it stays off the initial load.
+  useEffect(() => {
+    if (!ready || metric === 'off' || boundariesLoadedRef.current) return;
+    boundariesLoadedRef.current = true;
+    fetch('/data/boundaries.geojson')
+      .then((r) => r.json() as Promise<any>)
+      .then((fc) => {
+        (mapRef.current?.getSource('boundaries') as maplibregl.GeoJSONSource | undefined)?.setData(fc);
+        setBoundariesReady(true);
+      })
+      .catch(() => {
+        boundariesLoadedRef.current = false; // let a later pick retry
+      });
+  }, [ready, metric]);
 
   // Lazy-load the project footprints the first time the Projects view is active.
   // They only render once zoomed in (minzoom 9), so the fetch is deferred off the
@@ -1077,6 +1155,8 @@ export default function MapApp() {
                 onCoal={() => setCoalOn((v) => !v)}
                 liveOn={liveOn}
                 onLive={() => setLiveOn((v) => !v)}
+                metric={metric}
+                onMetric={setMetric}
                 status={status}
                 onStatus={setStatus}
                 minCap={minCap}
