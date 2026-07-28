@@ -681,6 +681,67 @@ select.mincap option {
   .hud { width: calc(100vw - 24px); }
   .featured-panel,
   .detail-panel { top: auto; max-height: 55vh; }
+
+  /* ---- §8 touch-target pass: 44px hit areas on phones ----
+     Grow padding/min-height, not font size, so the layout stays compact.
+     16px on selects/inputs also stops iOS from zooming the page on focus. */
+  .hud-toggle {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px 10px;
+    font-size: 18px;
+  }
+  .tabs button { padding: 14px 6px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 13px;
+  }
+  .seg button { min-height: 44px; }
+  .seg.seg-wrap button { flex-basis: 44%; }
+  select.mincap { min-height: 44px; font-size: 16px; }
+  .featured-btn { min-height: 44px; }
+  .show-all { min-height: 44px; }
+  .show-all input { width: 20px; height: 20px; }
+
+  /* timeline: enlarge the play button and give the range a fat, tappable thumb */
+  .tl-play { width: 44px; height: 44px; font-size: 13px; }
+  .tl-range {
+    height: 44px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+  }
+  .tl-range::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+  }
+  .tl-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px;
+    height: 24px;
+    margin-top: -9px;
+    border-radius: 50%;
+    background: var(--battery);
+  }
+  .tl-range::-moz-range-track { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); }
+  .tl-range::-moz-range-thumb { width: 24px; height: 24px; border: 0; border-radius: 50%; background: var(--battery); }
+
+  /* stats pill: bigger, and lifted clear of the MapLibre attribution bar it
+     otherwise overlaps at 375w (measured in the §8 scan). The compact bar can
+     expand to two lines (~64px) at the bottom, so clear that worst case. */
+  .stats-wrap { bottom: 84px; }
+  .stats { min-height: 44px; padding: 0 20px; font-size: 13.5px; }
+
+  /* country panel: copy/report/country buttons reach 44px too */
+  .cp-copy,
+  .cp-report,
+  .sp-country-more { min-height: 44px; }
+  .sp-country { padding: 6px 0; }
+  .featured-head button[aria-label='Close'] { width: 44px; height: 44px; }
 }
 
 /* ---------- HUD header button group (? + collapse) ---------- */
