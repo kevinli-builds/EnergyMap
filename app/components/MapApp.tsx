@@ -9,6 +9,7 @@ import JobsPanel from './JobsPanel';
 import ParksPanel, { ParkProps } from './ParksPanel';
 import Intro from './Intro';
 import CountryPanel from './CountryPanel';
+import CompareCard from './CompareCard';
 import featured from '../../data/featured.json';
 import energyMix from '../../data/energy-mix.json';
 import { COLORS, Metric, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
@@ -90,6 +91,8 @@ export default function MapApp() {
   const [introOpen, setIntroOpen] = useState(false);
   const [tourOn, setTourOn] = useState(false);
   const [tourItem, setTourItem] = useState<{ name: string; blurb: string } | null>(null);
+  // §4 D4: up to two projects staged for the head-to-head compare card.
+  const [compare, setCompare] = useState<Record<string, any>[]>([]);
 
   // Map lifecycle, data, and layer sync are split into focused hooks (see app/hooks).
   const { stats, recomputeStats } = useMapStats(mapRef, filteredRef);
@@ -177,6 +180,16 @@ export default function MapApp() {
   const closeDetail = useCallback(() => {
     setSelected(null);
     setParams({ p: null });
+  }, []);
+
+  // Stage a project for compare: a third pick starts a fresh pair; re-staging the
+  // same project is a no-op. Two staged → the head-to-head card renders.
+  const addCompare = useCallback((p: Record<string, any>) => {
+    setCompare((prev) => {
+      if (prev.length >= 2) return [p];
+      if (prev.some((x) => x.slug === p.slug)) return prev;
+      return [...prev, p];
+    });
   }, []);
 
   // First visit: show the welcome overlay once (unless arriving on a ?p= deep
@@ -367,7 +380,12 @@ export default function MapApp() {
       </div>
 
       {!tourOn && selected ? (
-        <DetailPanel project={selected} onClose={closeDetail} />
+        <DetailPanel
+          project={selected}
+          onClose={closeDetail}
+          onCompare={addCompare}
+          staged={compare.some((x) => x.slug === selected.slug)}
+        />
       ) : !tourOn && countryName ? (
         <CountryPanel country={countryName} onCountry={changeCountry} onClose={closeCountry} />
       ) : !tourOn && featuredOpen ? (
@@ -378,6 +396,8 @@ export default function MapApp() {
           onTour={() => setTourOn(true)}
         />
       ) : null}
+
+      {compare.length === 2 && <CompareCard a={compare[0]} b={compare[1]} onClose={() => setCompare([])} />}
 
       {introOpen && (
         <Intro

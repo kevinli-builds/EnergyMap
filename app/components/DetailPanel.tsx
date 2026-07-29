@@ -2,11 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import featured from '../../data/featured.json';
-import { COLORS, fmtCapacity, Tech, TECH_LABEL } from './shared';
+import { COLORS, fmtCapacity, fmtHomes, Tech, TECH_LABEL } from './shared';
 
 const featuredBlurb = new Map(featured.map((f) => [f.name, f.blurb]));
 
-export default function DetailPanel({ project, onClose }: { project: Record<string, any>; onClose: () => void }) {
+export default function DetailPanel({
+  project,
+  onClose,
+  onCompare,
+  staged,
+}: {
+  project: Record<string, any>;
+  onClose: () => void;
+  onCompare?: (p: Record<string, any>) => void;
+  staged?: boolean;
+}) {
   const p = project;
   const tech = p.tech as Tech;
   const blurb = featuredBlurb.get(p.name);
@@ -47,6 +57,11 @@ export default function DetailPanel({ project, onClose }: { project: Record<stri
           {p.status === 'operating' ? 'Operating' : 'Under construction'}
         </span>
         <div className="d-cap">{fmtCapacity(p.capacityMW, p.energyMWh)}</div>
+        {fmtHomes(p.capacityMW, tech) && (
+          <div className="d-homes">
+            ≈ powers <b>{fmtHomes(p.capacityMW, tech)}</b> homes <span className="d-est">· rough estimate</span>
+          </div>
+        )}
 
         <dl className="d-rows">
           {p.country && (
@@ -86,6 +101,12 @@ export default function DetailPanel({ project, onClose }: { project: Record<stri
             {copied ? '✓ Copied' : '🔗 Copy link'}
           </button>
         </div>
+
+        {onCompare && (
+          <button className={`d-compare ${staged ? 'staged' : ''}`} onClick={() => onCompare(p)}>
+            {staged ? '✓ Staged — open another project to compare' : '⚔ Compare head-to-head'}
+          </button>
+        )}
       </div>
     </div>
   );

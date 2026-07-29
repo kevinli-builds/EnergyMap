@@ -73,6 +73,41 @@ export function choroplethColor(metric: Exclude<Metric, 'off'>): unknown {
   return ['case', ['==', ['coalesce', ['get', metric], -1], -1], NODATA_FILL, interp];
 }
 
+// "Powers ~N homes" translation (§4 D3). Annual generation ≈ capacity × its
+// capacity factor × 8760 h, divided by a typical household's yearly use. Storage
+// (battery, pumped hydro) shifts energy rather than generating it, so it has no
+// figure — left out of the map here on purpose. Deliberately a rough estimate.
+export const CAPACITY_FACTOR: Partial<Record<Tech, number>> = {
+  solar: 0.2,
+  wind: 0.35,
+  geothermal: 0.75,
+  nuclear: 0.9,
+};
+const MWH_PER_HOME = 10.5; // ~US average annual household electricity use
+
+// Raw estimated households powered, or null when it doesn't apply (storage, or
+// missing/zero capacity). Used both for the popup line and to compare projects.
+export function homesPowered(capacityMW?: number | null, tech?: Tech): number | null {
+  const cf = tech ? CAPACITY_FACTOR[tech] : undefined;
+  if (!capacityMW || capacityMW <= 0 || cf == null) return null;
+  return (capacityMW * cf * 8760) / MWH_PER_HOME;
+}
+
+// Friendly, deliberately-rounded household count (e.g. "480,000"), or null.
+export function fmtHomes(capacityMW?: number | null, tech?: Tech): string | null {
+  const h = homesPowered(capacityMW, tech);
+  if (h == null) return null;
+  const rounded =
+    h >= 1_000_000
+      ? Math.round(h / 100_000) * 100_000
+      : h >= 100_000
+        ? Math.round(h / 10_000) * 10_000
+        : h >= 10_000
+          ? Math.round(h / 1_000) * 1_000
+          : Math.max(100, Math.round(h / 100) * 100);
+  return rounded.toLocaleString();
+}
+
 export function fmtCapacity(mw?: number | null, mwh?: number | null): string {
   const parts: string[] = [];
   if (mw != null) {

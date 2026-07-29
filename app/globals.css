@@ -438,6 +438,23 @@ select.mincap option {
 .d-tech { font-size: 12px; font-weight: 600; }
 .d-name { font-size: 18px; font-weight: 700; margin: 2px 0 8px; line-height: 1.25; }
 .d-cap { font-size: 20px; font-weight: 700; margin: 8px 0; }
+.d-homes { font-size: 12.5px; color: var(--battery); margin: -2px 0 8px; }
+.d-homes b { font-weight: 700; }
+.d-homes .d-est { color: var(--muted); font-weight: 400; }
+.d-compare {
+  width: 100%;
+  margin-top: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--solar);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.1);
+}
+.d-compare:hover { background: rgba(251, 191, 36, 0.2); }
+.d-compare.staged { color: var(--battery); border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.12); cursor: default; }
 .d-rows { margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .d-row {
   display: flex;
@@ -741,11 +758,88 @@ select.mincap option {
   .cp-report,
   .sp-country-more { min-height: 44px; }
   .sp-country { padding: 6px 0; }
-  .featured-head button[aria-label='Close'] { width: 44px; height: 44px; }
+  .featured-head button[aria-label='Close'],
+  .compare-head button { width: 44px; height: 44px; }
 }
 
 /* ---------- HUD header button group (? + collapse) ---------- */
 .hud-btns { display: flex; gap: 4px; }
+
+/* ---------- head-to-head compare card (§4 D4) ---------- */
+.compare-card {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  transform: translateX(-50%);
+  z-index: 13;
+  width: 460px;
+  max-width: calc(100vw - 24px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.compare-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.compare-head h2 { margin: 0; font-size: 14px; }
+.compare-head button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -6px -6px -6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+}
+.compare-head button:hover { background: rgba(255, 255, 255, 0.12); }
+.compare-grid {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 1px;
+  padding: 12px 14px;
+}
+.cc-corner { }
+.cc-proj { padding: 0 0 8px; display: flex; flex-direction: column; gap: 2px; text-align: center; }
+.cc-tech { font-size: 11px; font-weight: 600; }
+.cc-name { font-size: 12.5px; font-weight: 700; line-height: 1.25; }
+.cc-label {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 7px 10px 7px 0;
+  border-top: 1px solid var(--border);
+  align-self: center;
+  white-space: nowrap;
+}
+.cc-val {
+  font-size: 12.5px;
+  color: #dfe4ee;
+  text-align: center;
+  padding: 7px 4px;
+  border-top: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.cc-val.win { color: var(--solar); font-weight: 700; }
+.cc-crown { margin-right: 4px; }
+.compare-foot {
+  margin: 0;
+  padding: 0 14px 12px;
+  font-size: 10.5px;
+  color: var(--muted);
+  opacity: 0.85;
+}
 
 /* ---------- first-visit intro overlay ---------- */
 .intro-backdrop {
