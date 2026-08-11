@@ -23,13 +23,20 @@ export function subsolarPoint(date: Date): LngLat {
   return { lng, lat: decl / RAD };
 }
 
-// Is a point currently in daylight? (sun above the horizon → positive elevation)
-export function isSunlit(lng: number, lat: number, sub: LngLat): boolean {
+// cos(solar zenith) at a point — the sun's intensity factor: 1 overhead, 0 at
+// the horizon, negative below it. Clamped to 0 at/below the horizon, so it also
+// doubles as the "sunlit fraction" used by the generation ticker (§4 D2).
+export function solarIntensity(lng: number, lat: number, sub: LngLat): number {
   const h = (lng - sub.lng) * RAD;
   const cosZenith =
     Math.sin(lat * RAD) * Math.sin(sub.lat * RAD) +
     Math.cos(lat * RAD) * Math.cos(sub.lat * RAD) * Math.cos(h);
-  return cosZenith > 0;
+  return Math.max(0, cosZenith);
+}
+
+// Is a point currently in daylight? (sun above the horizon → positive elevation)
+export function isSunlit(lng: number, lat: number, sub: LngLat): boolean {
+  return solarIntensity(lng, lat, sub) > 0;
 }
 
 type Polygon = {

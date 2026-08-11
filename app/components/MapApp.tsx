@@ -12,7 +12,7 @@ import CountryPanel from './CountryPanel';
 import CompareCard from './CompareCard';
 import featured from '../../data/featured.json';
 import energyMix from '../../data/energy-mix.json';
-import { COLORS, Metric, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
+import { COLORS, fmtEnergy, Metric, StatusFilter, Tech, TECH_LABEL, TECHS } from './shared';
 import { openCoalPopup, openCompanyPopup, openParkPopup } from './mapLayers';
 import type { ClickHandlers, FC, LineFC, PointFeature } from './mapLayers';
 import { useMapStats } from '../hooks/useMapStats';
@@ -20,6 +20,7 @@ import { useMapInit } from '../hooks/useMapInit';
 import { useLiveLayer } from '../hooks/useLiveLayer';
 import { useLazyLayers } from '../hooks/useLazyLayers';
 import { useMapFilters } from '../hooks/useMapFilters';
+import { useGenerationTicker } from '../hooks/useGenerationTicker';
 
 // ISO-A3 → OWID country name, so a click on a choropleth country (which carries
 // only its ISO) can open the energy-mix panel (keyed by name).
@@ -106,6 +107,8 @@ export default function MapApp() {
     coalOn, coalReady, year, yearMax: YEAR_MAX, tab, showAll, visitableOnly, footprintsReady,
     refreshLive, recomputeStats,
   });
+  // §4 D2 "generating now" ticker — runs while the Projects view is showing.
+  const genMwh = useGenerationTicker(mapRef, filteredRef, ready, tab === 'projects' || showAll);
 
   const selectProject = useCallback((p: Record<string, any>) => {
     setTourOn(false);
@@ -463,6 +466,14 @@ export default function MapApp() {
                 🌍 Country energy mix — green vs. fossil →
               </button>
             </div>
+          </div>
+        )}
+        {ready && genMwh > 0 && (
+          <div
+            className="gen-ticker"
+            title="Rough estimate: in-view operating projects × per-technology capacity factor. Solar tracks the sun."
+          >
+            ⚡ ≈ <b>{fmtEnergy(genMwh)}</b> generated in view <span className="gt-since">since you arrived</span>
           </div>
         )}
         <button className="stats" onClick={() => setStatsOpen((v) => !v)}>

@@ -108,6 +108,14 @@ export function fmtHomes(capacityMW?: number | null, tech?: Tech): string | null
   return rounded.toLocaleString();
 }
 
+// Auto-scaling energy amount for the live generation ticker (§4 D2). MWh climbs
+// into GWh/TWh over a session, so scale the unit to keep the number readable.
+export function fmtEnergy(mwh: number): string {
+  if (mwh < 1000) return `${Math.round(mwh).toLocaleString()} MWh`;
+  if (mwh < 1_000_000) return `${(mwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} GWh`;
+  return `${(mwh / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} TWh`;
+}
+
 export function fmtCapacity(mw?: number | null, mwh?: number | null): string {
   const parts: string[] = [];
   if (mw != null) {
